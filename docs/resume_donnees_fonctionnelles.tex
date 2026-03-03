@@ -1,0 +1,431 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{enumitem}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\Ltwo}{L^2(\mathcal{T})}
+
+\title{\textbf{R\'esum\'e de suivi} \\ \large Donn\'ees fonctionnelles, ACP fonctionnelle et clustering}
+\author{Pierre}
+\date{2 mars 2026}
+
+\begin{document}
+\maketitle
+
+% ============================================================================
+\section{D\'efinition~: qu'est-ce qu'une donn\'ee fonctionnelle~?}
+
+Une \textbf{donn\'ee fonctionnelle} est une observation statistique dont la nature est une \textbf{fonction enti\`ere}, et non un simple vecteur de nombres. Pour chaque individu $i = 1, \ldots, n$, l'observation est une fonction~:
+\[
+    X_i : \mathcal{T} \longrightarrow \R, \qquad t \longmapsto X_i(t),
+\]
+o\`u $\mathcal{T}$ est un intervalle continu (par exemple $[0, 365]$ pour des jours, ou $[0, 2000]$ pour des profondeurs en m\`etres).
+
+Le point essentiel est le suivant~: \textbf{m\^eme si les valeurs sont recueillies de mani\`ere discr\`ete} (\`a des instants $t_1, t_2, \ldots, t_N$ donn\'es par les capteurs), la grandeur sous-jacente existe \textbf{en tout point} de l'intervalle $\mathcal{T}$. Entre deux instants de mesure, la temp\'erature, la c\'el\'erit\'e du son ou la salinit\'e ont bien une valeur~; on ne l'a simplement pas enregistr\'ee. C'est cette notion de \textbf{continuit\'e sous-jacente} qui distingue les donn\'ees fonctionnelles des donn\'ees multivari\'ees classiques.
+
+\paragraph{Exemples.}
+\begin{itemize}[nosep]
+    \item \textbf{Courbes de temp\'erature}~: pour 35 stations m\'et\'eo canadiennes, la temp\'erature journali\`ere sur un an donne une courbe $T_i(\text{jour})$.
+    \item \textbf{Profils oc\'eanographiques} (contexte de stage)~: chaque point en mer poss\`ede un profil de c\'el\'erit\'e du son $C_i(z)$ en fonction de la profondeur $z$. Ce profil est une courbe, pas un vecteur.
+\end{itemize}
+
+% ============================================================================
+\section{Pourquoi ne pas traiter les donn\'ees comme un vecteur~?}
+
+On pourrait \^etre tent\'e d'adopter une \textbf{approche multivari\'ee}~: consid\'erer les $N$ points de mesure comme $N$ variables et travailler dans $\R^N$. Par exemple, pour les temp\'eratures canadiennes, on aurait un tableau de $35$ individus et $365$ colonnes. Cependant, cette approche pose plusieurs probl\`emes fondamentaux.
+
+\subsection{Redondance et corr\'elation}
+
+Les points de mesure successifs sont \textbf{tr\`es fortement corr\'el\'es} entre eux~: la temp\'erature du jour $14$ est presque identique \`a celle du jour $15$. Or, l'approche multivari\'ee traite chaque colonne comme une variable potentiellement ind\'ependante. On se retrouve avec $365$ \guillemotleft~variables~\guillemotright{} qui portent en r\'ealit\'e seulement $3$ ou $4$ informations distinctes (niveau moyen, amplitude saisonni\`ere, d\'ecalage de phase\ldots). Les colonnes restantes sont de la \textbf{redondance}.
+
+Dans ce contexte ($N = 365 \gg n = 35$), on s'approche du \textbf{fl\'eau de la dimension}~: les distances euclidiennes en haute dimension deviennent peu discriminantes, la matrice de covariance $N \times N$ n'est plus inversible (rang $\leq n$), et les m\'ethodes classiques (k-means, analyse discriminante) perdent en performance.
+
+\subsection{Perte de l'ordre des donn\'ees}
+
+En statistique multivari\'ee, l'ordre des colonnes n'a aucune importance~: permuter \guillemotleft~taille~\guillemotright{} et \guillemotleft~poids~\guillemotright{} ne change rien. Mais ici, \textbf{l'ordre est fondamental}~: le jour $15$ est entre le jour $14$ et le jour $16$. Il y a une logique de \textbf{continuit\'e et de coh\'erence temporelle} (ou spatiale, pour un profil en profondeur) que l'approche vectorielle ignore enti\`erement.
+
+\subsection{Impossibilit\'e d'exploiter les d\'eriv\'ees}
+
+Traiter les courbes comme des fonctions permet de calculer et d'analyser leurs \textbf{d\'eriv\'ees}. La vitesse de changement de la temp\'erature (d\'eriv\'ee premi\`ere) ou l'acc\'el\'eration de ce changement (d\'eriv\'ee seconde) portent une information physiquement pertinente. L'approche vectorielle ne permet pas d'y acc\'eder de mani\`ere naturelle.
+
+% ============================================================================
+\section{Cadre math\'ematique~: l'espace $L^2$}
+
+On mod\'elise les donn\'ees fonctionnelles comme des \'el\'ements d'un \textbf{espace de fonctions}. Le choix standard est l'espace des fonctions de carr\'e int\'egrable~:
+\[
+    X_i \in \Ltwo = \left\{ f : \mathcal{T} \to \R \;\middle|\; \int_{\mathcal{T}} f(t)^2 \, dt < +\infty \right\}.
+\]
+
+\paragraph{Pourquoi cet espace en particulier~?}
+Le choix de $L^2$ n'est pas arbitraire~; il d\'ecoule d'un raisonnement pr\'ecis. Pour faire des statistiques sur des fonctions, on a besoin de calculer des \textbf{moyennes}, des \textbf{distances} et des \textbf{covariances}. Cela n\'ecessite un \textbf{produit scalaire}, et donc un \textbf{espace de Hilbert} (espace vectoriel complet muni d'un produit scalaire).
+
+Or, parmi les espaces $L^p$ classiques, \textbf{seul $L^2$ poss\`ede un produit scalaire}~:
+\[
+    \langle f, g \rangle_{L^2} = \int_{\mathcal{T}} f(t) \, g(t) \, dt.
+\]
+Les espaces $L^1$, $L^\infty$ ou $\mathcal{C}(\mathcal{T})$ sont des espaces norm\'es, mais leur norme ne provient pas d'un produit scalaire (elle ne v\'erifie pas l'identit\'e du parall\'elogramme). Sans produit scalaire, on ne peut pas d\'efinir l'op\'erateur de covariance, ni appliquer le th\'eor\`eme de Karhunen-Lo\`eve (fondement de l'ACP fonctionnelle), ni projeter les courbes sur une base de fonctions.
+
+$L^2$ est donc le \textbf{cadre minimal et naturel} pour l'analyse de donn\'ees fonctionnelles.
+
+% ============================================================================
+\section{Le mod\`ele d'observation et la question du bruit}
+
+En pratique, on n'observe jamais la vraie courbe $X_i(t)$. On dispose de mesures \textbf{discr\`etes et bruit\'ees}~:
+\[
+    Y_{ij} = X_i(t_j) + \varepsilon_{ij}, \qquad j = 1, \ldots, N_i,
+\]
+o\`u $\varepsilon_{ij}$ est un terme de bruit v\'erifiant~:
+\begin{itemize}[nosep]
+    \item $\E[\varepsilon_{ij}] = 0$ (centr\'e, pas de biais syst\'ematique),
+    \item $\Var(\varepsilon_{ij}) = \sigma^2$ (variance finie),
+    \item les $\varepsilon_{ij}$ sont non corr\'el\'es entre eux.
+\end{itemize}
+
+\paragraph{Origine du bruit.}
+Le bruit $\varepsilon_{ij}$ provient de plusieurs sources qui se m\'elangent en pratique~:
+\begin{enumerate}[nosep]
+    \item \textbf{Erreur instrumentale}~: tout capteur (thermom\`etre, sonde oc\'eanographique, spectrom\`etre) a une pr\'ecision finie et un bruit \'electronique intrins\`eque.
+    \item \textbf{Variabilit\'e \`a micro-\'echelle}~: les ph\'enom\`enes physiques pr\'esentent des fluctuations rapides (turbulence, vagues internes en mer) qui ne font pas partie du signal d'int\'er\^et.
+    \item \textbf{Erreur de discr\'etisation et d'arrondi}~: la digitalisation des valeurs et le nombre fini de bits de codage introduisent un \'ecart entre la valeur enregistr\'ee et la valeur r\'eelle.
+\end{enumerate}
+
+% ============================================================================
+\section{Le pr\'e-traitement~: du discret au fonctionnel par lissage}
+
+Le passage des observations discr\`etes $\{(t_j, Y_{ij})\}$ \`a une courbe continue $\hat{X}_i(t)$ est l'\'etape de \textbf{lissage}. C'est un pr\'e-traitement indispensable avant toute analyse fonctionnelle.
+
+\paragraph{Principe.} On approche chaque courbe par une combinaison lin\'eaire de \textbf{fonctions de base} connues~:
+\[
+    \hat{X}_i(t) = \sum_{k=1}^{d} \hat{\theta}_{ik} \, \psi_k(t),
+\]
+o\`u $\psi_1, \ldots, \psi_d$ sont les fonctions de base (B-splines pour des donn\'ees non p\'eriodiques, base de Fourier pour des donn\'ees p\'eriodiques) et $\hat{\theta}_{ik}$ les coefficients estim\'es.
+
+\paragraph{Estimation des coefficients.} Les coefficients sont obtenus par \textbf{moindres carr\'es p\'enalis\'es}, en minimisant~:
+\[
+    \sum_{j=1}^{N_i} \left( Y_{ij} - \sum_{k=1}^{d} \theta_{ik} \, \psi_k(t_j) \right)^2 + \lambda \int_{\mathcal{T}} \left[ \hat{X}_i''(t) \right]^2 dt.
+\]
+Le premier terme assure la fid\'elit\'e aux donn\'ees~; le second (la \textbf{p\'enalit\'e de r\'egularit\'e}) emp\^eche la courbe de trop osciller. Le param\`etre $\lambda > 0$ contr\^ole le compromis~:
+\begin{itemize}[nosep]
+    \item $\lambda \to 0$~: la courbe interpole les points (suit le bruit),
+    \item $\lambda \to +\infty$~: la courbe tend vers une droite (perd l'information).
+\end{itemize}
+Le choix de $\lambda$ est effectu\'e automatiquement par \textbf{validation crois\'ee g\'en\'eralis\'ee} (GCV).
+
+\bigskip
+
+Une fois le lissage effectu\'e, les $\hat{X}_i(t)$ sont de \textbf{vraies donn\'ees fonctionnelles}~: des courbes continues, \'evaluables en tout point de $\mathcal{T}$, d\'erivables, et pr\^etes pour l'analyse (ACP fonctionnelle, distances $L^2$, classification, etc.).
+
+\newpage
+
+% ============================================================================
+% ============================================================================
+%                    PARTIE II — ACP FONCTIONNELLE
+% ============================================================================
+% ============================================================================
+
+\part*{ACP fonctionnelle}
+\addcontentsline{toc}{part}{ACP fonctionnelle}
+
+% ============================================================================
+\section{Rappel~: l'ACP classique sur des vecteurs}
+
+Avant de passer au cas fonctionnel, rappelons le principe de l'ACP classique. On dispose de $n$ individus, chacun d\'ecrit par un vecteur de $p$ variables~:
+\[
+    Z_i = (z_{i1}, z_{i2}, \ldots, z_{ip}) \in \R^p, \qquad i = 1, \ldots, n.
+\]
+
+L'ACP cherche de \textbf{nouvelles directions} $v_1, v_2, \ldots \in \R^p$, appel\'ees \textbf{composantes principales}, telles que~:
+\begin{itemize}[nosep]
+    \item la premi\`ere direction $v_1$ capture le \textbf{maximum de variance} des donn\'ees~;
+    \item la $k$-i\`eme direction $v_k$ capture le maximum de variance \textbf{restante}, sous la contrainte d'\^etre orthogonale aux pr\'ec\'edentes.
+\end{itemize}
+
+Formellement, on diagonalise la \textbf{matrice de covariance} $\Sigma \in \R^{p \times p}$~:
+\[
+    \Sigma \, v_k = \lambda_k \, v_k,
+\]
+o\`u les $v_k$ sont les \textbf{vecteurs propres} (directions principales) et les $\lambda_1 \geq \lambda_2 \geq \ldots$ sont les \textbf{valeurs propres} (variances expliqu\'ees dans chaque direction). Le \textbf{score} de l'individu $i$ sur la composante $k$ est~:
+\[
+    \xi_{ik} = \langle Z_i - \mu, \, v_k \rangle = \sum_{j=1}^{p} (z_{ij} - \mu_j) \cdot v_{kj}.
+\]
+
+En ne conservant que les $K$ premi\`eres composantes ($K \ll p$), on obtient un \textbf{r\'esum\'e en basse dimension} qui capture l'essentiel de la variabilit\'e.
+
+% ============================================================================
+\section{L'ACP fonctionnelle~: le m\^eme principe, transpos\'e aux courbes}
+
+L'id\'ee fondamentale est que l'ACP fonctionnelle r\'ealise \textbf{exactement la m\^eme op\'eration} que l'ACP classique, mais dans l'espace $\Ltwo$ au lieu de $\R^p$. Chaque brique de l'ACP classique poss\`ede un homologue fonctionnel, obtenu en rempla\c{c}ant les sommes finies par des int\'egrales et les vecteurs par des fonctions.
+
+\subsection{La moyenne fonctionnelle $\mu(t)$}
+
+La moyenne est simplement la courbe obtenue en moyennant, pour chaque instant $t$, les valeurs des $n$ individus~:
+\[
+    \mu(t) = \frac{1}{n} \sum_{i=1}^{n} X_i(t).
+\]
+C'est une \textbf{fonction}, pas un nombre. Elle repr\'esente le comportement moyen de l'ensemble des courbes.
+
+\subsection{La surface de covariance $C(s,t)$}
+
+En ACP classique, la covariance entre la variable $j$ et la variable $k$ est un nombre~: $\Sigma_{jk}$. En fonctionnel, les \guillemotleft~variables~\guillemotright{} sont index\'ees en continu par le temps (ou la profondeur). La covariance entre l'instant $s$ et l'instant $t$ est~:
+\[
+    C(s, t) = \frac{1}{n} \sum_{i=1}^{n} \bigl[X_i(s) - \mu(s)\bigr] \cdot \bigl[X_i(t) - \mu(t)\bigr].
+\]
+C'est une fonction de \textbf{deux variables}~: une \textbf{surface}. Elle remplace la matrice de covariance $\Sigma$.
+
+\begin{itemize}[nosep]
+    \item Sur la \textbf{diagonale} ($s = t$)~: $C(t,t)$ est la variance au temps $t$, c'est-\`a-dire l'intensit\'e de la variabilit\'e inter-individuelle \`a cet instant.
+    \item \textbf{Hors diagonale}~: $C(s,t)$ mesure comment les fluctuations \`a l'instant $s$ sont li\'ees aux fluctuations \`a l'instant $t$.
+\end{itemize}
+
+\subsection{L'\'equation aux fonctions propres}
+
+En ACP classique, on r\'esout $\Sigma \, v = \lambda \, v$ (matrice $\times$ vecteur = scalaire $\times$ vecteur). L'analogue fonctionnel est~:
+\[
+    \boxed{\int_{\mathcal{T}} C(s, t) \, \varphi_k(s) \, ds = \lambda_k \, \varphi_k(t)}
+\]
+o\`u~:
+\begin{itemize}[nosep]
+    \item les $\varphi_k(t)$ sont les \textbf{fonctions propres} (l'analogue des vecteurs propres $v_k$),
+    \item les $\lambda_1 \geq \lambda_2 \geq \ldots \geq 0$ sont les \textbf{valeurs propres} (les variances dans chaque direction).
+\end{itemize}
+
+Les fonctions propres forment une \textbf{base orthonorm\'ee} de $\Ltwo$~:
+\[
+    \langle \varphi_j, \varphi_k \rangle = \int_{\mathcal{T}} \varphi_j(t) \, \varphi_k(t) \, dt = \begin{cases} 1 & \text{si } j = k, \\ 0 & \text{sinon.} \end{cases}
+\]
+
+% ============================================================================
+\section{Interpr\'etation des fonctions propres}
+
+Chaque fonction propre $\varphi_k(t)$ repr\'esente un \textbf{mode de variation} des courbes autour de la moyenne. Concr\`etement, pour les courbes de temp\'erature canadiennes~:
+
+\begin{itemize}
+    \item $\varphi_1(t)$ est approximativement constante et positive sur $\mathcal{T}$~: c'est le mode \guillemotleft~niveau global~\guillemotright. Les stations avec un score $\xi_{i1}$ \'elev\'e sont \textbf{globalement plus chaudes} que la moyenne.
+    \item $\varphi_2(t)$ est positive en hiver et n\'egative en \'et\'e~: c'est le mode \guillemotleft~contraste saisonnier~\guillemotright. Les stations avec un score $\xi_{i2}$ \'elev\'e ont des hivers plus froids et des \'et\'es plus chauds (climat continental), tandis que celles avec un score faible ont un climat plus temp\'er\'e (maritime).
+\end{itemize}
+
+La valeur propre $\lambda_k$ mesure la \textbf{part de variance} expliqu\'ee par le mode $k$. En g\'en\'eral, les premiers modes capturent l'essentiel~: dans l'exemple des temp\'eratures, $\varphi_1$ et $\varphi_2$ expliquent \`a eux seuls environ $90\%$ de la variabilit\'e totale.
+
+% ============================================================================
+\section{Les scores~: de la dimension infinie \`a la dimension finie}
+
+Le \textbf{score} de l'individu $i$ sur la composante $k$ est le produit scalaire entre la courbe centr\'ee et la $k$-i\`eme fonction propre~:
+\[
+    \xi_{ik} = \int_{\mathcal{T}} \bigl[X_i(t) - \mu(t)\bigr] \, \varphi_k(t) \, dt.
+\]
+
+C'est un \textbf{nombre r\'eel}. Il mesure \guillemotleft~combien l'individu $i$ varie dans la direction $\varphi_k$~\guillemotright. C'est ici que se r\'ealise le passage fondamental~:
+\[
+    X_i(t) \in \Ltwo \quad \xrightarrow{\text{ACP}} \quad (\xi_{i1}, \xi_{i2}, \ldots, \xi_{iK}) \in \R^K.
+\]
+\textbf{On passe d'une courbe (dimension infinie) \`a un vecteur de $K$ nombres (dimension finie).} Ce passage est \textbf{optimal} au sens o\`u, pour un nombre fix\'e $K$ de composantes, aucune autre projection lin\'eaire ne capture davantage de variance.
+
+% ============================================================================
+\section{La d\'ecomposition de Karhunen-Lo\`eve}
+
+Le th\'eor\`eme de Karhunen-Lo\`eve garantit que toute courbe peut s'\'ecrire comme~:
+\[
+    X_i(t) = \mu(t) + \sum_{k=1}^{\infty} \xi_{ik} \, \varphi_k(t),
+\]
+o\`u la convergence est en norme $L^2$. En pratique, on tronque cette s\'erie aux $K$ premiers termes~:
+\[
+    X_i(t) \approx \mu(t) + \sum_{k=1}^{K} \xi_{ik} \, \varphi_k(t).
+\]
+
+Cette d\'ecomposition dit que \textbf{toute courbe est la moyenne, plus une combinaison lin\'eaire des modes de variation}, pond\'er\'ee par les scores individuels. C'est l'analogue fonctionnel exact de la d\'ecomposition en composantes principales dans $\R^p$.
+
+% ============================================================================
+\section{Le parall\`ele complet~: r\'ecapitulatif}
+
+\begin{center}
+\begin{tabular}{lll}
+    \hline
+    & \textbf{ACP classique} ($\R^p$) & \textbf{ACP fonctionnelle} ($L^2$) \\
+    \hline
+    Individu & Vecteur $Z_i \in \R^p$ & Fonction $X_i(t) \in L^2$ \\
+    Moyenne & $\mu \in \R^p$ & $\mu(t)$, une fonction \\
+    Covariance & Matrice $\Sigma$ ($p \times p$) & Surface $C(s,t)$ \\
+    \'Equation propre & $\Sigma \, v_k = \lambda_k \, v_k$ & $\int C(s,t) \varphi_k(s) \, ds = \lambda_k \varphi_k(t)$ \\
+    Directions & Vecteurs propres $v_k \in \R^p$ & Fonctions propres $\varphi_k(t) \in L^2$ \\
+    Scores & $\xi_{ik} = \langle Z_i - \mu, v_k \rangle$ & $\xi_{ik} = \int [X_i(t) - \mu(t)] \varphi_k(t) \, dt$ \\
+    Produit scalaire & $\sum u_j v_j$ & $\int f(t) g(t) \, dt$ \\
+    \hline
+\end{tabular}
+\end{center}
+
+% ============================================================================
+\section{Application au stage~: le pipeline complet}
+
+Dans le contexte du stage en oc\'eanographie, l'ACP fonctionnelle constitue la \textbf{passerelle} entre les profils de c\'el\'erit\'e (fonctionnels) et les m\'ethodes de classification (qui op\`erent dans $\R^K$). Le pipeline complet est~:
+
+\medskip
+\begin{center}
+\begin{tabular}{rcl}
+    Profils bruts $\{(z_j, Y_{ij})\}$ & $\xrightarrow{\text{lissage}}$ & Courbes $\hat{X}_i(t) \in L^2$ \\
+    Courbes $\hat{X}_i(t)$ & $\xrightarrow{\text{ACP fonctionnelle}}$ & Scores $\xi_i = (\xi_{i1}, \ldots, \xi_{iK}) \in \R^K$ \\
+    Scores $\xi_i$ + variables $Z_i$ & $\xrightarrow{\text{combinaison}}$ & Repr\'esentation mixte $W_i \in \R^{K+p}$ \\
+    $\{W_i\}_{i=1}^n$ & $\xrightarrow{\text{clustering}}$ & Groupes / clusters \\
+\end{tabular}
+\end{center}
+
+\medskip
+Les scores ACP $\xi_{ik}$ sont donc les \textbf{entr\'ees directes} pour la classification. Ils r\'esument chaque profil oc\'eanographique en quelques nombres, de mani\`ere optimale, tout en \'eliminant la redondance et en respectant la nature fonctionnelle des donn\'ees.
+
+\newpage
+
+% ============================================================================
+% ============================================================================
+%                    PARTIE III --- CLUSTERING FONCTIONNEL
+% ============================================================================
+% ============================================================================
+
+\part*{Clustering fonctionnel}
+\addcontentsline{toc}{part}{Clustering fonctionnel}
+
+% ============================================================================
+\section{Rappel~: le clustering classique}
+
+Le clustering (ou classification non supervis\'ee) consiste \`a \textbf{regrouper des individus similaires en clusters}, sans disposer d'\'etiquettes de classe. Le seul ingr\'edient n\'ecessaire est une \textbf{mesure de similarit\'e} (ou de dissimilarit\'e) entre individus.
+
+Les m\'ethodes classiques op\`erent dans $\R^p$~:
+\begin{itemize}[nosep]
+    \item \textbf{k-means}~: minimise la variance intra-cluster en utilisant la distance euclidienne. N\'ecessite des \textbf{vecteurs} en entr\'ee.
+    \item \textbf{CAH} (classification ascendante hi\'erarchique)~: fusionne it\'erativement les individus (ou groupes) les plus proches. Peut op\'erer sur une \textbf{matrice de distances}.
+    \item \textbf{k-medoids} (PAM)~: similaire \`a k-means mais utilise des \textbf{distances} quelconques, pas uniquement euclidiennes.
+\end{itemize}
+
+Point crucial~: k-means exige des vecteurs de $\R^p$, tandis que la CAH et le k-medoids n'ont besoin que d'une \textbf{matrice de distances} $n \times n$.
+
+% ============================================================================
+\section{Le d\'efi~: clusterer des courbes}
+
+Les individus sont d\'esormais des \textbf{courbes} $\hat{X}_i(t) \in \Ltwo$. On ne peut pas les placer directement dans k-means, qui attend des vecteurs de dimension finie. Deux approches fondamentales se pr\'esentent~:
+\begin{enumerate}[nosep]
+    \item \textbf{R\'eduire} les courbes en vecteurs, puis appliquer un clustering classique.
+    \item D\'efinir une \textbf{distance entre courbes} directement, puis utiliser un clustering bas\'e sur des distances.
+\end{enumerate}
+
+Ces deux approches donnent lieu aux trois strat\'egies d\'etaill\'ees ci-dessous.
+
+% ============================================================================
+\section{Strat\'egie A~: r\'eduction par FPCA puis clustering classique}
+
+C'est l'approche la plus directe~: on utilise l'ACP fonctionnelle (partie pr\'ec\'edente) pour transformer chaque courbe en un vecteur de scores, puis on applique un algorithme classique.
+
+\medskip
+\begin{center}
+\begin{tabular}{rcl}
+    Courbes $\hat{X}_i(t)$ & $\xrightarrow{\text{FPCA}}$ & Scores $\xi_i = (\xi_{i1}, \ldots, \xi_{iK}) \in \R^K$ \\
+    Scores $\xi_i$ & $\xrightarrow{\text{k-means}}$ & Clusters \\
+\end{tabular}
+\end{center}
+
+\paragraph{Avantage.} Simple et directe~; on se ram\`ene \`a un probl\`eme connu dans $\R^K$.
+
+\paragraph{Inconv\'enient.} L'ACP fonctionnelle maximise la \textbf{variance expliqu\'ee}, pas la \textbf{s\'eparation entre groupes}. Une direction de grande variance n'est pas forc\'ement une direction qui discrimine les clusters. De plus, le choix de $K$ (nombre de scores retenus) influence directement les r\'esultats.
+
+% ============================================================================
+\section{Strat\'egie B~: distance $L^2$ directe entre courbes}
+
+Au lieu de r\'eduire les courbes, on d\'efinit une \textbf{distance fonctionnelle} directement dans $\Ltwo$.
+
+\subsection{Distance $L^2$ de base ($D_0$)}
+
+La distance entre deux courbes est~:
+\[
+    D_0(\hat{X}_i, \hat{X}_j) = \sqrt{\int_{\mathcal{T}} \bigl[\hat{X}_i(t) - \hat{X}_j(t)\bigr]^2 \, dt}.
+\]
+C'est la \textbf{norme $L^2$ de la diff\'erence}~: intuitivement, la racine carr\'ee de l'aire entre les deux courbes.
+
+\subsection{Distance sur les d\'eriv\'ees ($D_1$)}
+
+On peut aussi comparer les courbes par leur \textbf{dynamique} (pente, vitesse de changement) en calculant la distance sur les d\'eriv\'ees premi\`eres~:
+\[
+    D_1(\hat{X}_i, \hat{X}_j) = \sqrt{\int_{\mathcal{T}} \bigl[\hat{X}_i'(t) - \hat{X}_j'(t)\bigr]^2 \, dt}.
+\]
+Cette distance est sensible aux diff\'erences de \textbf{forme} plut\^ot qu'aux diff\'erences de \textbf{niveau}.
+
+\subsection{Distance pond\'er\'ee ($D_\omega$)}
+
+On peut combiner les deux en une distance pond\'er\'ee~:
+\[
+    D_\omega(\hat{X}_i, \hat{X}_j) = \sqrt{\omega \cdot D_0^2 + (1 - \omega) \cdot D_1^2}, \qquad \omega \in [0, 1].
+\]
+\begin{itemize}[nosep]
+    \item $\omega = 1$~: seul le \textbf{niveau} des courbes compte,
+    \item $\omega = 0$~: seule la \textbf{forme} (d\'eriv\'ee) compte,
+    \item $\omega \in (0,1)$~: compromis entre niveau et forme.
+\end{itemize}
+
+Ces distances permettent de construire une matrice de distances $n \times n$, utilisable directement par la CAH ou le k-medoids.
+
+% ============================================================================
+\section{Le cas mixte~: donn\'ees fonctionnelles + vectorielles}
+
+Dans le contexte du stage, chaque individu poss\`ede \textbf{deux sources d'information}~:
+\[
+    \text{Individu } i~: \quad \underbrace{\hat{X}_i(t)}{\text{courbe (fonctionnel)}} \quad + \quad \underbrace{Z_i = (z_{i1}, \ldots, z_{ip})}{\text{vecteur (classique)}}.
+\]
+
+La difficult\'e centrale est que ces deux sources vivent dans des \textbf{espaces diff\'erents} ($L^2$ vs $\R^p$) et ne peuvent pas \^etre empil\'ees na\"ivement dans une m\^eme matrice.
+
+\subsection{Approche par distance pond\'er\'ee $D_\omega$}
+
+On calcule \textbf{s\'epar\'ement} une distance fonctionnelle et une distance vectorielle, puis on les combine~:
+\begin{align*}
+    D_f(i,j) &= \sqrt{\int_{\mathcal{T}} \bigl[\hat{X}_i(t) - \hat{X}_j(t)\bigr]^2 \, dt} \qquad \text{(distance $L^2$ entre courbes)}, \\
+    D_s(i,j) &= \| Z_i - Z_j \| \qquad \text{(distance euclidienne entre vecteurs)}, \\
+    D_\omega(i,j) &= \sqrt{\omega \cdot D_f(i,j)^2 + (1 - \omega) \cdot D_s(i,j)^2}, \qquad \omega \in [0, 1].
+\end{align*}
+
+Le param\`etre $\omega$ contr\^ole l'\textbf{importance relative} des courbes par rapport aux variables classiques~:
+\begin{itemize}[nosep]
+    \item $\omega = 1$~: clustering uniquement sur les courbes,
+    \item $\omega = 0$~: clustering uniquement sur les variables vectorielles,
+    \item $\omega \in (0,1)$~: combinaison des deux sources.
+\end{itemize}
+La question du \textbf{choix optimal de $\omega$} est l'un des sujets de recherche du stage.
+
+\subsection{Approche par noyaux ($D_K$)}
+
+Une alternative consiste \`a d\'efinir un \textbf{noyau} (mesure de similarit\'e) pour chaque source, puis \`a les combiner~:
+\begin{align*}
+    K_f(\hat{X}_i, \hat{X}_j) &\quad \text{(noyau fonctionnel, ex.~: gaussien dans $L^2$)}, \\
+    K_s(Z_i, Z_j) &\quad \text{(noyau vectoriel, ex.~: gaussien dans $\R^p$)}, \\
+    K(i,j) &= K_f(\hat{X}_i, \hat{X}_j) \cdot K_s(Z_i, Z_j) \quad \text{(produit de noyaux)}.
+\end{align*}
+La distance associ\'ee est~:
+\[
+    D_K(i,j) = \sqrt{K(i,i) + K(j,j) - 2K(i,j)}.
+\]
+
+\paragraph{Avantage.} Pas de param\`etre $\omega$ \`a choisir~; la combinaison est plus \guillemotleft~naturelle~\guillemotright.
+
+\paragraph{Inconv\'enient.} Il faut choisir les fonctions noyaux $K_f$ et $K_s$ ainsi que leurs param\`etres (ex.~: la largeur de bande $\sigma$ du noyau gaussien).
+
+% ============================================================================
+\section{Synth\`ese~: les trois strat\'egies compar\'ees}
+
+\begin{center}
+\begin{tabular}{llll}
+    \hline
+    & \textbf{Strat\'egie A} & \textbf{Strat\'egie B} & \textbf{Strat\'egie C} \\
+    \hline
+    Principe & FPCA $\to$ scores $\to$ k-means & Distance $L^2$ directe & Noyaux combin\'es \\
+    Entr\'ee & Vecteurs $\xi_i \in \R^K$ & Matrice de distances $D_\omega$ & Matrice de distances $D_K$ \\
+    Donn\'ees mixtes & Concat\'enation $(\xi_i, Z_i)$ & $D_\omega$ pond\'er\'ee & Produit $K_f \cdot K_s$ \\
+    Param\`etres & $K$ (nb de scores) & $\omega$ (poids) & Noyaux et $\sigma$ \\
+    \hline
+\end{tabular}
+\end{center}
+
+\medskip
+Le travail du stage consiste \`a \textbf{comparer ces trois approches} --- d'abord sur des donn\'ees simul\'ees (o\`u les vrais clusters sont connus), puis sur les donn\'ees oc\'eanographiques r\'eelles --- afin de d\'eterminer quelle strat\'egie produit les clusters les plus pertinents du point de vue de la propagation acoustique.
+
+\end{document}
