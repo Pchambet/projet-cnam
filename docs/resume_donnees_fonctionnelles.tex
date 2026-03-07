@@ -12,11 +12,13 @@
 \newcommand{\Ltwo}{L^2(\mathcal{T})}
 
 \title{\textbf{R\'esum\'e de suivi} \\ \large Donn\'ees fonctionnelles, ACP fonctionnelle et clustering}
-\author{Pierre}
-\date{2 mars 2026}
+\author{Pierre Chambet}
+\date{Mars 2026}
 
 \begin{document}
 \maketitle
+\tableofcontents
+\newpage
 
 % ============================================================================
 \section{D\'efinition~: qu'est-ce qu'une donn\'ee fonctionnelle~?}
@@ -351,46 +353,45 @@ On peut aussi comparer les courbes par leur \textbf{dynamique} (pente, vitesse d
 \]
 Cette distance est sensible aux diff\'erences de \textbf{forme} plut\^ot qu'aux diff\'erences de \textbf{niveau}.
 
-\subsection{Distance pond\'er\'ee ($D_\omega$)}
+\subsection{Distance pond\'er\'ee $D_p(\alpha)$}
 
-On peut combiner les deux en une distance pond\'er\'ee~:
+On peut combiner les deux en une distance pond\'er\'ee, apr\`es normalisation par le maximum ($\tilde{D}_0 = D_0 / \max(D_0)$, $\tilde{D}_1 = D_1 / \max(D_1)$)~:
 \[
-    D_\omega(\hat{X}_i, \hat{X}_j) = \sqrt{\omega \cdot D_0^2 + (1 - \omega) \cdot D_1^2}, \qquad \omega \in [0, 1].
+    D_p(\alpha) = \sqrt{(1 - \alpha) \cdot \tilde{D}_0^{\,2} + \alpha \cdot \tilde{D}_1^{\,2}}, \qquad \alpha \in [0, 1].
 \]
 \begin{itemize}[nosep]
-    \item $\omega = 1$~: seul le \textbf{niveau} des courbes compte,
-    \item $\omega = 0$~: seule la \textbf{forme} (d\'eriv\'ee) compte,
-    \item $\omega \in (0,1)$~: compromis entre niveau et forme.
+    \item $\alpha = 0$~: seul le \textbf{niveau} des courbes compte ($D_p = \tilde{D}_0$),
+    \item $\alpha = 1$~: seule la \textbf{forme} (d\'eriv\'ee) compte ($D_p = \tilde{D}_1$),
+    \item $\alpha \in (0,1)$~: compromis entre niveau et forme.
 \end{itemize}
 
-Ces distances permettent de construire une matrice de distances $n \times n$, utilisable directement par la CAH ou le k-medoids.
+Ces distances permettent de construire une matrice de distances $n \times n$, utilisable directement par la CAH ou le k-medoids (PAM).
 
 % ============================================================================
 \section{Le cas mixte~: donn\'ees fonctionnelles + vectorielles}
 
 Dans le contexte du stage, chaque individu poss\`ede \textbf{deux sources d'information}~:
 \[
-    \text{Individu } i~: \quad \underbrace{\hat{X}_i(t)}{\text{courbe (fonctionnel)}} \quad + \quad \underbrace{Z_i = (z_{i1}, \ldots, z_{ip})}{\text{vecteur (classique)}}.
+    \text{Individu } i~: \quad \underbrace{\hat{X}_i(t)}_{\text{courbe (fonctionnel)}} \quad + \quad \underbrace{Z_i = (z_{i1}, \ldots, z_{ip})}_{\text{vecteur (classique)}}.
 \]
 
 La difficult\'e centrale est que ces deux sources vivent dans des \textbf{espaces diff\'erents} ($L^2$ vs $\R^p$) et ne peuvent pas \^etre empil\'ees na\"ivement dans une m\^eme matrice.
 
-\subsection{Approche par distance pond\'er\'ee $D_\omega$}
+\subsection{Approche par distance pond\'er\'ee $D_w(\alpha, \omega)$}
 
-On calcule \textbf{s\'epar\'ement} une distance fonctionnelle et une distance vectorielle, puis on les combine~:
+On calcule \textbf{s\'epar\'ement} une distance fonctionnelle combin\'ee $D_p(\alpha)$ et une distance vectorielle, puis on les combine~:
 \begin{align*}
-    D_f(i,j) &= \sqrt{\int_{\mathcal{T}} \bigl[\hat{X}_i(t) - \hat{X}_j(t)\bigr]^2 \, dt} \qquad \text{(distance $L^2$ entre courbes)}, \\
-    D_s(i,j) &= \| Z_i - Z_j \| \qquad \text{(distance euclidienne entre vecteurs)}, \\
-    D_\omega(i,j) &= \sqrt{\omega \cdot D_f(i,j)^2 + (1 - \omega) \cdot D_s(i,j)^2}, \qquad \omega \in [0, 1].
+    D_p(\alpha) &\quad \text{(distance fonctionnelle combin\'ee niveau + forme, cf.\ section pr\'ec\'edente)}, \\
+    D_s(i,j) &= \| Z_i^{\text{std}} - Z_j^{\text{std}} \| \qquad \text{(distance euclidienne sur les variables standardis\'ees)}, \\
+    D_w(\alpha, \omega) &= \sqrt{\omega \cdot D_p(\alpha)^2 + (1 - \omega) \cdot \tilde{D}_s^{\,2}}, \qquad \alpha, \omega \in [0, 1].
 \end{align*}
 
-Le param\`etre $\omega$ contr\^ole l'\textbf{importance relative} des courbes par rapport aux variables classiques~:
+Deux param\`etres contr\^olent le comportement de $D_w$~:
 \begin{itemize}[nosep]
-    \item $\omega = 1$~: clustering uniquement sur les courbes,
-    \item $\omega = 0$~: clustering uniquement sur les variables vectorielles,
-    \item $\omega \in (0,1)$~: combinaison des deux sources.
+    \item $\alpha$~: curseur \textbf{niveau vs forme} dans la composante fonctionnelle,
+    \item $\omega$~: \textbf{importance relative} des courbes par rapport aux variables classiques.
 \end{itemize}
-La question du \textbf{choix optimal de $\omega$} est l'un des sujets de recherche du stage.
+La question du \textbf{choix optimal du couple $(\alpha, \omega)$} est l'un des sujets de recherche du stage.
 
 \subsection{Approche par noyaux ($D_K$)}
 
@@ -404,10 +405,11 @@ La distance associ\'ee est~:
 \[
     D_K(i,j) = \sqrt{K(i,i) + K(j,j) - 2K(i,j)}.
 \]
+Le produit $K = K_f \cdot K_s$ signifie que deux individus ne sont similaires \textbf{que si les deux sources le confirment}.
 
-\paragraph{Avantage.} Pas de param\`etre $\omega$ \`a choisir~; la combinaison est plus \guillemotleft~naturelle~\guillemotright.
+\paragraph{Avantage.} Pas de param\`etre $\omega$ \`a choisir~; un seul param\`etre $\alpha$ (dans $D_p$) reste \`a s\'electionner. Les largeurs de bande $\sigma_f$ et $\sigma_s$ sont fix\'ees automatiquement par la m\'ediane des distances.
 
-\paragraph{Inconv\'enient.} Il faut choisir les fonctions noyaux $K_f$ et $K_s$ ainsi que leurs param\`etres (ex.~: la largeur de bande $\sigma$ du noyau gaussien).
+\paragraph{Inconv\'enient.} La combinaison par produit est rigide~: elle ne permet pas de moduler l'importance relative des deux sources.
 
 % ============================================================================
 \section{Synth\`ese~: les trois strat\'egies compar\'ees}
@@ -418,14 +420,14 @@ La distance associ\'ee est~:
     & \textbf{Strat\'egie A} & \textbf{Strat\'egie B} & \textbf{Strat\'egie C} \\
     \hline
     Principe & FPCA $\to$ scores $\to$ k-means & Distance $L^2$ directe & Noyaux combin\'es \\
-    Entr\'ee & Vecteurs $\xi_i \in \R^K$ & Matrice de distances $D_\omega$ & Matrice de distances $D_K$ \\
-    Donn\'ees mixtes & Concat\'enation $(\xi_i, Z_i)$ & $D_\omega$ pond\'er\'ee & Produit $K_f \cdot K_s$ \\
-    Param\`etres & $K$ (nb de scores) & $\omega$ (poids) & Noyaux et $\sigma$ \\
+    Entr\'ee & Vecteurs $\xi_i \in \R^K$ & Matrice de distances $D_w$ & Matrice de distances $D_K$ \\
+    Donn\'ees mixtes & Concat\'enation $(\xi_i, Z_i)$ & $D_w(\alpha, \omega)$ & Produit $K_f \cdot K_s$ \\
+    Param\`etres & $K$ (nb de scores) & $\alpha, \omega$ & $\alpha$ + $\sigma$ auto \\
     \hline
 \end{tabular}
 \end{center}
 
 \medskip
-Le travail du stage consiste \`a \textbf{comparer ces trois approches} --- d'abord sur des donn\'ees simul\'ees (o\`u les vrais clusters sont connus), puis sur les donn\'ees oc\'eanographiques r\'eelles --- afin de d\'eterminer quelle strat\'egie produit les clusters les plus pertinents du point de vue de la propagation acoustique.
+Ces trois strat\'egies ont \'et\'e \textbf{impl\'ement\'ees et compar\'ees} sur quatre jeux de donn\'ees labellis\'es (Canadian Weather, Growth, AEMET, Tecator). Les r\'esultats montrent que (1)~les d\'eriv\'ees sont syst\'ematiquement informatives ($\alpha_{\text{optimal}} \geq 0.6$ sur les 4 datasets), et que (2)~le verrou principal est le \textbf{crit\`ere de s\'election} du couple $(\alpha, \omega)$ en contexte non supervis\'e. Le rapport de synth\`ese d\'etaille ces r\'esultats et les perspectives de recherche.
 
 \end{document}
