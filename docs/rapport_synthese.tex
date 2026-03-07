@@ -1,0 +1,780 @@
+\documentclass[11pt, a4paper]{article}
+
+% ─── Encodage et langue ───
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+
+% ─── Maths ───
+\usepackage{amsmath, amssymb, amsthm}
+
+% ─── Mise en page ───
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds, calc, decorations.pathreplacing}
+\usepackage{pifont}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue!60!black, urlcolor=blue!70!black}
+\usepackage{fancyhdr}
+
+% ─── En-tête / pied de page ───
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textsc{Rapport de synthèse}}
+\fancyhead[R]{\small\textsc{Mars 2026}}
+\fancyfoot[C]{\thepage}
+
+% ─── Commandes ───
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Ltwo}{L^2(\mathcal{T})}
+\newcommand{\Dp}{D_p}
+\newcommand{\Dw}{D_w}
+\newcommand{\DK}{D_K}
+
+% ─── Couleurs ───
+\definecolor{func}{HTML}{2166AC}
+\definecolor{vect}{HTML}{B2182B}
+\definecolor{mix}{HTML}{4DAF4A}
+\definecolor{gris}{HTML}{666666}
+\definecolor{emphbox}{HTML}{FFF3CD}
+\definecolor{emphborder}{HTML}{856404}
+\definecolor{resultbox}{HTML}{D4EDDA}
+\definecolor{resultborder}{HTML}{155724}
+
+% ─── Boîtes d'emphase ───
+\usepackage{framed}
+
+% keybox : fond jaune, cadre ambre
+\newenvironment{keybox}[1][]{%
+  \def\FrameCommand{\fboxsep=8pt \fcolorbox{emphborder}{emphbox}}%
+  \MakeFramed{\advance\hsize-\width \FrameRestore}%
+  \noindent\textbf{#1}\par\smallskip\noindent\ignorespaces
+}{\endMakeFramed}
+
+% resultbox : fond vert, cadre vert foncé
+\newenvironment{resultbox}[1][]{%
+  \def\FrameCommand{\fboxsep=8pt \fcolorbox{resultborder}{resultbox}}%
+  \MakeFramed{\advance\hsize-\width \FrameRestore}%
+  \noindent\textbf{#1}\par\smallskip\noindent\ignorespaces
+}{\endMakeFramed}
+
+% ============================================================================
+\title{%
+  \vspace{-1cm}
+  \textbf{Classification non supervisée} \\[0.3em]
+  \textbf{de données mixtes fonctionnelles + vectorielles} \\[0.5em]
+  \Large Synthèse des travaux — Architecture des distances, \\
+  résultats multi-dataset et perspectives
+}
+\author{Pierre Chambet}
+\date{Mars 2026}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\begin{abstract}
+Ce rapport synthétise l'ensemble des travaux réalisés sur la classification
+non supervisée de données mixtes (fonctionnelles + vectorielles). On y
+présente le problème, l'architecture des distances construite à deux niveaux,
+les résultats obtenus sur quatre jeux de données labellisés, et les
+conclusions méthodologiques qui en découlent — notamment la découverte que
+les dérivées sont systématiquement informatives ($\alpha > 0.6$ optimal sur
+4/4 datasets) et l'identification du critère de sélection des paramètres
+comme verrou principal.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ============================================================================
+\section{Le problème : mesurer la similarité entre objets mixtes}
+% ============================================================================
+
+Chaque individu $i = 1, \ldots, n$ possède deux types d'information
+qui vivent dans des espaces mathématiques \textbf{différents} :
+
+\[
+  \text{Individu } i : \quad
+  \underbrace{\hat{X}_i(t) \in \Ltwo}_{\text{courbe fonctionnelle}}
+  \quad + \quad
+  \underbrace{Z_i = (z_{i1}, \ldots, z_{ip}) \in \R^p}_{\text{vecteur classique}}.
+\]
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    box/.style={draw, rounded corners=6pt, minimum width=4.5cm, minimum height=3cm,
+                align=center, font=\small},
+  ]
+  \node[box, fill=func!8] (ind1) {
+    \textbf{Individu $i$} \\[6pt]
+    Courbe $X_i(t)$ \\
+    {\footnotesize vit dans $L^2$} \\[6pt]
+    $Z_i = (48.4, -123.3, 1.6)$ \\
+    {\footnotesize vit dans $\R^3$}
+  };
+  \node[box, fill=vect!8, right=2.5cm of ind1] (ind2) {
+    \textbf{Individu $j$} \\[6pt]
+    Courbe $X_j(t)$ \\
+    {\footnotesize vit dans $L^2$} \\[6pt]
+    $Z_j = (43.1, -79.4, 2.8)$ \\
+    {\footnotesize vit dans $\R^3$}
+  };
+  \draw[{Stealth[length=4mm]}-{Stealth[length=4mm]}, thick, dashed, gris]
+    (ind1) -- (ind2) node[midway, above, font=\large\bfseries] {$d(i,j) = \;?$};
+\end{tikzpicture}
+\caption{Le problème central : construire une distance entre objets
+qui vivent dans des espaces différents ($L^2$ et $\R^p$).}
+\end{figure}
+
+On ne peut pas empiler une courbe et un vecteur dans un même objet, ni
+calculer une distance euclidienne entre eux. Il faut une \textbf{architecture}
+de distances qui :
+
+\begin{enumerate}[nosep]
+  \item Mesure la dissimilarité \textbf{entre courbes} (fonctionnel).
+  \item Mesure la dissimilarité \textbf{entre vecteurs} (classique).
+  \item \textbf{Combine} les deux de manière contrôlée, avec des paramètres
+    interprétables.
+\end{enumerate}
+
+La solution est construite en \textbf{deux niveaux} hiérarchiques, détaillés
+dans les sections suivantes.
+
+% ============================================================================
+\newpage
+\section{Les briques de base (Niveau 0)}
+% ============================================================================
+
+Trois distances élémentaires, chacune capturant un aspect différent des données.
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{$D_0$ : distance $L^2$ entre courbes — le \textbf{niveau}}
+
+\[
+  D_0(i,j) = \sqrt{\int_{\mathcal{T}} \bigl[\hat{X}_i(t) - \hat{X}_j(t)\bigr]^2 \, dt}
+\]
+
+$D_0$ mesure la \textbf{proximité globale des profils} : c'est l'aire entre
+les deux courbes (au sens $L^2$). Deux courbes au même niveau mais
+légèrement décalées en phase seront proches en $D_0$.
+
+\begin{itemize}[nosep]
+  \item[\textcolor{mix}{$\boldsymbol{+}$}] Interprétation directe : ``l'écart vertical moyen''.
+  \item[\textcolor{vect}{$\boldsymbol{-}$}] Insensible aux différences de
+    \textbf{forme} si les niveaux sont proches.
+\end{itemize}
+
+\paragraph{Exemple.}
+Vancouver et Montréal ont des formes de courbes similaires (hiver froid, été
+chaud) mais Montréal est décalée vers le bas. $D_0$ les sépare bien. En
+revanche, Vancouver (courbe plate) et Halifax (forte amplitude) ont des
+niveaux proches mais des dynamiques très différentes — $D_0$ ne le voit pas.
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{$D_1$ : distance $L^2$ entre dérivées — la \textbf{forme}}
+
+\[
+  D_1(i,j) = \sqrt{\int_{\mathcal{T}} \bigl[\hat{X}_i'(t) - \hat{X}_j'(t)\bigr]^2 \, dt}
+\]
+
+$D_1$ mesure la proximité des \textbf{dynamiques}. Si $X_i(t)$ est une
+température, alors $X_i'(t)$ est la vitesse de changement.
+
+\begin{itemize}[nosep]
+  \item[\textcolor{mix}{$\boldsymbol{+}$}] Capture la \textbf{forme},
+    indépendamment du niveau vertical.
+  \item[\textcolor{vect}{$\boldsymbol{-}$}] Sensible au bruit (la dérivée
+    amplifie les fluctuations). Nécessite un bon lissage en amont.
+\end{itemize}
+
+\paragraph{Exemple.}
+Vancouver (Pacifique) : hivers doux, étés doux $\Rightarrow$ dérivée
+\textbf{plate}. Halifax (Atlantique) : hivers froids, étés chauds
+$\Rightarrow$ dérivée \textbf{forte} en mars et octobre. $D_0$ les voit
+proches (niveaux similaires). $D_1$ les voit \textbf{très différentes}.
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{$D_s$ : distance euclidienne sur $Z$ — le \textbf{vectoriel}}
+
+\[
+  D_s(i,j) = \left\| Z_i^{\text{std}} - Z_j^{\text{std}} \right\|_2
+\]
+
+où $Z^{\text{std}}$ est la standardisation variable par variable (moyenne~0,
+variance~1). $D_s$ mesure la proximité dans l'espace des variables classiques
+et \textbf{ignore totalement les courbes}.
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{Bilan : aucune ne suffit seule}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+  \toprule
+  \textbf{Distance} & \textbf{Ce qu'elle voit} & \textbf{Ce qu'elle rate} \\
+  \midrule
+  $D_0$ & Niveau vertical des courbes & Forme / dynamique \\
+  $D_1$ & Forme / vitesse de changement & Niveau vertical \\
+  $D_s$ & Position dans $\R^p$ & Les courbes entièrement \\
+  \bottomrule
+\end{tabular}
+\caption{Complémentarité des trois distances de base.}
+\end{table}
+
+Aucune des trois ne capture toute l'information $\Rightarrow$ il faut les
+\textbf{combiner}.
+
+% ============================================================================
+\newpage
+\section{$\Dp(\alpha)$ : combiner niveau et forme (Niveau 1)}
+% ============================================================================
+
+\subsection{Le problème d'échelle}
+
+$D_0$ et $D_1$ sont sur des échelles très différentes. Sur Canadian Weather :
+\[
+  D_0 \in [3.9,\; 532] \qquad D_1 \in [0.51,\; 6.6] \qquad \text{(facteur $\times 80$)}.
+\]
+
+Si on les additionne brut, $D_1$ ne pèse rien. \textbf{Solution :}
+normaliser par le maximum :
+\[
+  \tilde{D}_0 = \frac{D_0}{\max(D_0)} \in [0,1], \qquad
+  \tilde{D}_1 = \frac{D_1}{\max(D_1)} \in [0,1].
+\]
+
+\subsection{La formule}
+
+\begin{keybox}[Définition de $\Dp(\alpha)$]
+\[
+  \Dp(\alpha) = \sqrt{(1 - \alpha)\,\tilde{D}_0^{\,2}
+  + \alpha\,\tilde{D}_1^{\,2}},
+  \qquad \alpha \in [0, 1]
+\]
+\end{keybox}
+
+\subsection{Le curseur $\alpha$}
+
+Le paramètre $\alpha$ agit comme un \textbf{curseur} entre le niveau
+et la forme :
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+  \draw[very thick, func!70] (0,0) -- (10,0);
+  \foreach \x/\lab in {0/$\alpha{=}0$, 5/$\alpha{=}0.5$, 10/$\alpha{=}1$} {
+    \fill[func] (\x, 0) circle (3pt);
+    \node[below=6pt, font=\small] at (\x, 0) {\lab};
+  }
+  \node[above=8pt, font=\small\bfseries, func] at (0, 0) {Niveau pur};
+  \node[above=8pt, font=\small] at (5, 0) {Compromis};
+  \node[above=8pt, font=\small\bfseries, func] at (10, 0) {Forme pure};
+
+  \node[below=22pt, font=\footnotesize, gris] at (0, 0) {$\Dp = \tilde{D}_0$};
+  \node[below=22pt, font=\footnotesize, gris] at (10, 0) {$\Dp = \tilde{D}_1$};
+\end{tikzpicture}
+\end{figure}
+
+\subsection{Propriétés}
+
+$\Dp(\alpha)$ est une \textbf{vraie distance} (positivité, symétrie,
+inégalité triangulaire par Minkowski sur $\ell^2$ pondéré). C'est important
+car PAM nécessite une matrice de distances au sens métrique.
+
+\begin{keybox}[Rapport avec les travaux précédents (Hugo Nguyen, 2023)]
+Hugo avait une formule similaire pour $\Dp$, mais combinait uniquement
+\textbf{deux distances fonctionnelles} ($D_0$ et $D_1$).
+\end{keybox}
+
+% ============================================================================
+\newpage
+\section{Le mix total : $\Dw$ et $\DK$ (Niveau 2)}
+% ============================================================================
+
+On a maintenant $\Dp(\alpha)$ (fonctionnel combiné) et $D_s$ (vectoriel).
+Deux stratégies pour les combiner.
+
+\subsection{Architecture complète}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    base/.style={draw, rounded corners=4pt, minimum width=2.5cm, minimum height=0.9cm,
+                 align=center, font=\small\bfseries},
+    fleche/.style={-{Stealth[length=3mm]}, thick},
+    etiq/.style={font=\footnotesize\itshape, text=gris},
+  ]
+
+  \node[base, fill=func!15, text=func] (D0) at (0,0) {$D_0$ \footnotesize niveau};
+  \node[base, fill=func!15, text=func] (D1) at (3.5,0) {$D_1$ \footnotesize forme};
+  \node[base, fill=vect!15, text=vect] (Ds) at (8.5,0) {$D_s$ \footnotesize vectoriel};
+
+  \node[base, fill=func!25, text=func] (Dp) at (1.75,-1.8) {$\Dp(\alpha)$};
+  \node[base, fill=mix!20, text=mix!70!black] (Dw) at (4.0,-3.6) {$\Dw(\alpha, \omega)$};
+  \node[base, fill=mix!20, text=mix!70!black] (DK) at (7.5,-3.6) {$\DK(\alpha)$};
+
+  \draw[fleche, func!70] (D0) -- (Dp) node[etiq, midway, left=2pt] {$1{-}\alpha$};
+  \draw[fleche, func!70] (D1) -- (Dp) node[etiq, midway, right=2pt] {$\alpha$};
+  \draw[fleche, func!70] (Dp) -- (Dw) node[etiq, midway, left=2pt] {$\omega$};
+  \draw[fleche, vect!70] (Ds) -- (Dw) node[etiq, midway, right=2pt] {$1{-}\omega$};
+  \draw[fleche, func!70] (Dp) -- (DK) node[etiq, midway, left=2pt] {$K_f$};
+  \draw[fleche, vect!70] (Ds) -- (DK) node[etiq, midway, right=2pt] {$K_s$};
+
+  \node[font=\footnotesize\scshape, text=gris] at (-1.5,0) {Niv.\ 0};
+  \node[font=\footnotesize\scshape, text=gris] at (-1.5,-1.8) {Niv.\ 1};
+  \node[font=\footnotesize\scshape, text=gris] at (-1.5,-3.6) {Niv.\ 2};
+\end{tikzpicture}
+\caption{Architecture à deux niveaux.
+\textcolor{func}{Bleu} = fonctionnel,
+\textcolor{vect}{rouge} = vectoriel,
+\textcolor{mix}{vert} = mixte.}
+\end{figure}
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{Stratégie B : $\Dw(\alpha, \omega)$ — pondération directe}
+
+\begin{keybox}[Définition de $\Dw(\alpha, \omega)$]
+\[
+  \Dw(\alpha, \omega) = \sqrt{\omega \cdot \Dp(\alpha)^2
+  + (1 - \omega) \cdot \tilde{D}_s^{\,2}},
+  \qquad \alpha, \omega \in [0, 1]
+\]
+\end{keybox}
+
+Deux ``boutons'' indépendants :
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+  % Bouton alpha
+  \draw[very thick, func!70] (0, 0.8) -- (5, 0.8);
+  \fill[func] (0, 0.8) circle (2.5pt); \fill[func] (5, 0.8) circle (2.5pt);
+  \node[left, font=\small\bfseries] at (-0.3, 0.8) {$\alpha$ :};
+  \node[above=3pt, font=\footnotesize] at (0, 0.8) {Niveau};
+  \node[above=3pt, font=\footnotesize] at (5, 0.8) {Forme};
+  \node[right=3pt, font=\footnotesize, gris] at (5.3, 0.8) {(dans le fonctionnel)};
+
+  % Bouton omega
+  \draw[very thick, mix!70] (0, 0) -- (5, 0);
+  \fill[mix!70!black] (0, 0) circle (2.5pt); \fill[mix!70!black] (5, 0) circle (2.5pt);
+  \node[left, font=\small\bfseries] at (-0.3, 0) {$\omega$ :};
+  \node[above=3pt, font=\footnotesize] at (0, 0) {Vecteurs $Z$};
+  \node[above=3pt, font=\footnotesize] at (5, 0) {Courbes};
+  \node[right=3pt, font=\footnotesize, gris] at (5.3, 0) {(entre les 2 sources)};
+\end{tikzpicture}
+\end{figure}
+
+Cas limites :
+
+\begin{center}
+\begin{tabular}{ccl}
+  \toprule
+  $\boldsymbol{\alpha}$ & $\boldsymbol{\omega}$ & \textbf{Distance effective} \\
+  \midrule
+  $*$ & $0$ & $\tilde{D}_s$ seul (courbes ignorées) \\
+  $0$ & $1$ & $\tilde{D}_0$ seul (niveau des courbes) \\
+  $1$ & $1$ & $\tilde{D}_1$ seul (forme des courbes) \\
+  $0.5$ & $0.5$ & Compromis global \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Sélection des paramètres :} grid search 2D sur
+$(\alpha, \omega) \in \{0, 0.1, \ldots, 1\}^2$ (121 combinaisons), en
+maximisant la \textbf{silhouette moyenne} (critère non supervisé).
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{Stratégie C : $\DK(\alpha)$ — noyaux gaussiens}
+
+Au lieu de pondérer des distances, on passe par des \textbf{similarités}
+(noyaux), qu'on combine par produit :
+
+\begin{align}
+  K_f(i,j) &= \exp\!\left( -\frac{\Dp(\alpha)_{ij}^2}{2\sigma_f^2} \right),
+  & \sigma_f &= \text{médiane}\{\Dp(\alpha)_{ij}\},  \\[4pt]
+  K_s(i,j) &= \exp\!\left( -\frac{D_s(i,j)^2}{2\sigma_s^2} \right),
+  & \sigma_s &= \text{médiane}\{D_s(i,j)\},  \\[4pt]
+  K &= K_f \cdot K_s, & & \text{(produit = ``ET logique flou'')} \\[4pt]
+  \DK(i,j) &= \sqrt{K(i,i) + K(j,j) - 2K(i,j)}.
+\end{align}
+
+Le produit $K = K_f \cdot K_s$ signifie que deux individus ne sont similaires
+\textbf{que si les deux sources le confirment}. Si $K_f \approx 0$ (courbes
+très différentes), alors $K \approx 0$ même si $K_s = 1$.
+
+\textbf{Avantage :} pas de paramètre $\omega$ — grid search 1D sur $\alpha$
+uniquement (11 valeurs au lieu de 121).
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lcccc}
+  \toprule
+  & \textbf{Paramètres} & \textbf{Combinaison} & \textbf{Grid search} \\
+  \midrule
+  $\Dw$ & $\alpha, \omega$ & Somme pondérée & 2D (121 pts) \\
+  $\DK$ & $\alpha$ + $\sigma$ auto & Produit de noyaux & 1D (11 pts) \\
+  \bottomrule
+\end{tabular}
+\caption{Comparaison des deux stratégies de combinaison.}
+\end{table}
+
+% ============================================================================
+\newpage
+\section{Résultats sur quatre jeux de données}
+% ============================================================================
+
+\subsection{Protocole expérimental}
+
+Le pipeline a été testé sur quatre jeux de données labellisés, couvrant des
+domaines variés :
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{llcccc}
+  \toprule
+  \textbf{Dataset} & \textbf{Courbes $X(t)$} & $n$ & \textbf{$Z$} & $k$ & \textbf{Classes} \\
+  \midrule
+  Canadian Weather & Température (365j) & 35 & lat, lon, précip & 4 & Régions clim. \\
+  Growth & Taille enfant (31 âges) & 93 & taille fin., croiss. & 2 & Garçon / Fille \\
+  AEMET & Température Espagne (365j) & 73 & alt, lat, lon & 4 & Zones clim. \\
+  Tecator & Spectres NIR (100$\lambda$) & 215 & water, protein & 3 & Niv.\ de gras \\
+  \bottomrule
+\end{tabular}
+\caption{Les quatre jeux de données utilisés pour la validation.}
+\end{table}
+
+Pour chaque dataset, on applique le pipeline complet : lissage B-splines +
+GCV, FPCA, calcul de toutes les distances, grid search sur $(\alpha, \omega)$
+avec PAM, évaluation par silhouette (intrinsèque) et ARI (extrinsèque,
+contre la vérité terrain).
+
+\subsection{Le tableau principal}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{l cc | cc | cc}
+  \toprule
+  & \multicolumn{2}{c|}{\textbf{Baselines}} & \multicolumn{2}{c|}{\textbf{Silhouette choisit}} & \multicolumn{2}{c}{\textbf{ARI-optimal}} \\
+  \textbf{Dataset} & $D_0$ seul & $D_s$ seul & $(\alpha, \omega)$ & ARI & $(\alpha, \omega)$ & ARI \\
+  \midrule
+  Canadian Weather & 0.23 & 0.62 & (0,\, 0) & 0.62 & (0.6,\, 0.8) & \cellcolor{resultbox}\textbf{0.90} \\
+  Growth           & 0.12 & 0.42 & (0,\, 0) & 0.42 & (0.9,\, 0.3) & \cellcolor{resultbox}\textbf{0.79} \\
+  AEMET            & 0.17 & 0.33 & (0,\, 1) & 0.17 & (0.9,\, 0.2) & \cellcolor{resultbox}\textbf{0.43} \\
+  Tecator          & 0.15 & 0.55 & (0,\, 1) & 0.15 & (1.0,\, 1.0) & \cellcolor{resultbox}\textbf{0.63} \\
+  \bottomrule
+\end{tabular}
+\caption{Résultats comparatifs. La colonne ``Silhouette choisit'' donne le
+couple $(\alpha, \omega)$ sélectionné par la silhouette (critère non
+supervisé). ``ARI-optimal'' donne le couple qui maximise réellement l'ARI
+(connu a posteriori). Le gain est systématique et massif.}
+\label{tab:resultats}
+\end{table}
+
+\subsection{Trois observations majeures}
+
+\paragraph{1. $D_0$ seul est toujours insuffisant.}
+Le niveau des courbes ne suffit jamais à retrouver les classes (ARI entre
+0.12 et 0.23). Même $D_s$ seul fait mieux sur 3 datasets sur 4.
+
+\paragraph{2. $\alpha$ optimal est toujours $\geq 0.6$.}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+  \draw[thick, ->] (0,0) -- (11, 0) node[right] {$\alpha$};
+  \foreach \x in {0,1,...,10} {
+    \draw (\x, -0.1) -- (\x, 0.1);
+    \node[below=4pt, font=\tiny] at (\x, -0.1) {\pgfmathparse{\x/10}\pgfmathprintnumber[fixed, precision=1]{\pgfmathresult}};
+  }
+  % Marques
+  \fill[func] (6, 0.4) circle (4pt) node[above=4pt, font=\footnotesize] {CAN};
+  \fill[func] (9, 0.4) circle (4pt) node[above=4pt, font=\footnotesize] {AEM};
+  \fill[func] (9, -0.5) circle (4pt) node[below=4pt, font=\footnotesize] {GRO};
+  \fill[func] (10, 0.4) circle (4pt) node[above=4pt, font=\footnotesize] {TEC};
+
+  % Zone
+  \draw[very thick, mix!60, decorate, decoration={brace, amplitude=8pt, mirror}]
+    (5.5, -1) -- (10.5, -1) node[midway, below=10pt, font=\small\bfseries, mix!70!black]
+    {Zone optimale};
+\end{tikzpicture}
+\caption{Les $\alpha$ ARI-optimaux tombent tous dans $[0.6, 1.0]$.
+Les dérivées ($D_1$) sont \textbf{systématiquement informatives}.}
+\end{figure}
+
+\paragraph{3. La silhouette tombe sur les coins, l'optimum est à l'intérieur.}
+La silhouette sélectionne systématiquement $\omega = 0$ ou $\omega = 1$,
+c'est-à-dire une source unique. L'ARI-optimal est à l'intérieur de la grille
+sur 3 datasets sur 4. L'architecture des distances \emph{fonctionne} — c'est
+le \textbf{critère de sélection} qui est faible.
+
+% ============================================================================
+\newpage
+\section{Le paradoxe de la silhouette}
+% ============================================================================
+
+\subsection{Ce que la silhouette mesure}
+
+La silhouette évalue si chaque point est plus proche de son cluster que du
+cluster voisin. C'est un critère de \textbf{compacité géométrique} : il
+récompense les clusters ronds et bien séparés.
+
+\subsection{Pourquoi elle se trompe sur $(\alpha, \omega)$}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{p{5.5cm} p{5.5cm}}
+  \toprule
+  \textbf{Sil-optimal : $(\alpha{=}0, \omega{=}0)$} &
+  \textbf{ARI-optimal : $(\alpha{=}0.6, \omega{=}0.8)$} \\
+  \midrule
+  Distance $= \tilde{D}_s$ (que du vectoriel) &
+  Distance $= 80\%$ fonctionnel + $20\%$ vectoriel \\[4pt]
+  Clusters par \textbf{géographie} &
+  Clusters par \textbf{dynamique climatique} \\[4pt]
+  Géométriquement \textbf{compacts} &
+  Géométriquement \textbf{allongés} \\[4pt]
+  Silhouette $= 0.448$ \textcolor{mix}{$\boldsymbol{\checkmark}$} &
+  Silhouette $= 0.312$ \\[4pt]
+  ARI $= 0.616$ &
+  ARI $= 0.898$ \textcolor{mix}{$\boldsymbol{\checkmark}$} \\[2pt]
+  \small 9 stations mal classées &
+  \small \textbf{1 seule} station mal classée \\
+  \bottomrule
+\end{tabular}
+\caption{Canadian Weather : la silhouette préfère des clusters \emph{ronds}
+à des clusters \emph{justes}. Le détail de la table de confusion montre
+que le couple ARI-optimal classe correctement 34 stations sur 35.}
+\end{table}
+
+\begin{keybox}[Le paradoxe résumé]
+La silhouette préfère des clusters \textbf{géométriquement compacts} à des
+clusters \textbf{sémantiquement corrects}. Elle est un bon critère pour
+choisir $k$ (nombre de clusters), mais un mauvais critère pour choisir les
+\textbf{paramètres de distance} $(\alpha, \omega)$.
+\end{keybox}
+
+\subsection{Conséquence}
+
+\begin{resultbox}[Conclusion méthodologique]
+Le problème n'est \textbf{pas} l'architecture des distances — elle atteint
+ARI $\approx 0.9$ avec les bons paramètres. Le verrou principal est le
+\textbf{critère de sélection} des paramètres $(\alpha, \omega)$ en contexte
+purement non supervisé. La section~\ref{sec:perspectives} détaille les
+pistes de recherche envisagées.
+\end{resultbox}
+
+% ============================================================================
+\newpage
+\section{Apports par rapport aux travaux précédents}
+% ============================================================================
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{p{5.8cm} p{5.8cm}}
+  \toprule
+  \textbf{Hugo Nguyen (2023)} & \textbf{Travaux actuels (2026)} \\
+  \midrule
+  $D_0 + D_1 \to D_p$ \newline
+  (2 distances fonctionnelles) &
+  $D_0 + D_1 \to D_p(\alpha)$ \newline
+  (idem, \textbf{bug $D_1$ corrigé}) \\[6pt]
+
+  \textcolor{vect}{\ding{55}} Variables $Z$ jamais utilisées &
+  \textcolor{mix}{\ding{51}} $Z$ intégré dans $\Dw$ et $\DK$ \\[4pt]
+
+  \textcolor{vect}{\ding{55}} $\Dw$ jamais implémenté &
+  \textcolor{mix}{\ding{51}} $\Dw(\alpha, \omega)$ créé + grid search 2D \\[4pt]
+
+  \textcolor{vect}{\ding{55}} $\DK$ jamais implémenté &
+  \textcolor{mix}{\ding{51}} $\DK(\alpha)$ créé (noyaux gaussiens) \\[4pt]
+
+  k-means sur matrice de distance \newline
+  (traite les lignes comme des coordonnées) &
+  PAM (correct pour le clustering \newline
+  à partir de matrices de distance) \\[4pt]
+
+  1 dataset (SHOM, non labellisé) &
+  4 datasets labellisés + pipeline générique \\
+  \bottomrule
+\end{tabular}
+\caption{Comparaison des contributions.}
+\end{table}
+
+\begin{resultbox}[Découverte principale]
+Les dérivées ($D_1$) sont \textbf{systématiquement informatives} :
+$\alpha_{\text{optimal}} \in [0.6,\, 1.0]$ sur les~4 datasets. Hugo ne
+pouvait pas observer ce pattern car il n'avait pas mis en place de
+recherche systématique sur $\alpha$.
+\end{resultbox}
+
+% ============================================================================
+\newpage
+\section{Perspectives de recherche}
+\label{sec:perspectives}
+% ============================================================================
+
+L'architecture des distances a été validée sur quatre jeux de données
+labellisés. Le verrou principal identifié est la \textbf{sélection
+automatique des paramètres} $(\alpha, \omega)$ en contexte purement non
+supervisé, où l'ARI n'est pas disponible. En non supervisé pur, il faut
+résoudre \textbf{deux problèmes couplés simultanément} :
+\begin{enumerate}[nosep]
+  \item Choisir $k$ (nombre de clusters).
+  \item Choisir $(\alpha, \omega)$ (paramètres de distance).
+\end{enumerate}
+Ces problèmes sont couplés car le meilleur $(\alpha, \omega)$ dépend de $k$,
+et inversement. Voici les pistes de recherche envisagées.
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{Sélection par stabilité du clustering}
+
+La piste la plus prometteuse repose sur une idée simple : le bon triplet
+$(k, \alpha, \omega)$ est celui qui produit des clusters
+\textbf{reproductibles} lorsqu'on perturbe les données.
+
+\paragraph{Protocole.}
+Pour chaque triplet $(k, \alpha, \omega)$ dans la grille :
+\begin{enumerate}[nosep]
+  \item Calculer la partition $\mathcal{C}$ sur les $n$ individus complets
+    (PAM avec la distance $\Dw(\alpha, \omega)$).
+  \item Répéter $B$ fois ($B \approx 50$) :
+    \begin{enumerate}[nosep]
+      \item Sous-échantillonner $80\%$ des individus aléatoirement.
+      \item Recalculer la distance et la partition $\mathcal{C}_b^*$ sur ce
+        sous-échantillon.
+      \item Mesurer l'ARI entre $\mathcal{C}$ (restreinte aux individus
+        présents) et $\mathcal{C}_b^*$.
+    \end{enumerate}
+  \item La \textbf{stabilité} du triplet =
+    $\text{Stab}(k, \alpha, \omega) = \frac{1}{B}\sum_{b=1}^{B}
+    \text{ARI}(\mathcal{C}, \mathcal{C}_b^*)$.
+\end{enumerate}
+Le triplet $(k^*, \alpha^*, \omega^*)$ avec la stabilité maximale est retenu.
+
+\paragraph{Pourquoi la stabilité ?}
+\begin{itemize}[nosep]
+  \item Pas de biais vers des formes géométriques particulières
+    (contrairement à la silhouette).
+  \item Fonctionne aussi pour sélectionner $k$ : un $k$ trop grand ou trop
+    petit produit des clusters instables.
+  \item Ne nécessite \textbf{aucun label} — l'ARI est calculé entre deux
+    partitions produites par la méthode elle-même.
+  \item Mesure une propriété \textbf{intrinsèquement désirable} : la
+    reproductibilité.
+\end{itemize}
+
+\paragraph{Coût calculatoire.}
+Pour une grille $(\alpha, \omega) \in \{0, 0.1, \ldots, 1\}^2$,
+$k \in \{2, \ldots, 6\}$, et $B = 50$ : cela représente
+$11 \times 11 \times 5 \times 50 = 30\,250$ exécutions de PAM. C'est
+un coût important mais tout à fait faisable (PAM sur $n < 300$ est rapide).
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{Vote entre critères de validation}
+
+Plutôt que de s'appuyer sur un unique critère (silhouette, gap, ou
+stabilité), on peut faire \textbf{voter} plusieurs critères pour élire le
+meilleur $(k, \alpha, \omega)$.
+
+\paragraph{Principe.}
+Pour chaque triplet $(k, \alpha, \omega)$, on calcule $M$ critères
+de validation interne :
+\begin{itemize}[nosep]
+  \item \textbf{Silhouette} : compacité et séparation géométrique.
+  \item \textbf{Gap statistic} (Tibshirani et al., 2001) : écart d'inertie
+    par rapport à une référence uniforme.
+  \item \textbf{Prediction strength} (Tibshirani \& Walther, 2005) :
+    reproductibilité par validation croisée.
+  \item \textbf{Stabilité} (bootstrap, cf.\ section précédente).
+  \item \textbf{Indice de Calinski-Harabasz} : rapport variance
+    inter/intra.
+  \item \textbf{Indice de Davies-Bouldin} : ratio de dispersion intra par
+    rapport à la séparation inter.
+\end{itemize}
+
+Chaque critère $m$ produit un \textbf{classement} des triplets
+$(k, \alpha, \omega)$. On agrège ces classements par une règle de vote :
+
+\begin{itemize}[nosep]
+  \item \textbf{Vote majoritaire} : le triplet qui arrive en tête du plus
+    grand nombre de critères.
+  \item \textbf{Score de Borda} : chaque critère attribue un rang, on somme
+    les rangs, le triplet avec la somme de rangs la plus faible gagne.
+  \item \textbf{Vote pondéré} : pondérer les critères par leur fiabilité
+    estimée (par exemple sur les datasets labellisés de validation).
+\end{itemize}
+
+L'avantage du vote est qu'il réduit la \textbf{dépendance à un seul
+indicateur}. Un critère qui se trompe (comme la silhouette sur $\omega$)
+sera corrigé par les autres, à condition que la majorité des critères
+capturent un signal pertinent.
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{Optimisation bayésienne}
+
+Le grid search 3D $(k, \alpha, \omega)$ évalue systématiquement toutes les
+combinaisons, ce qui est coûteux. L'\textbf{optimisation bayésienne}
+propose une alternative intelligente :
+
+\begin{enumerate}[nosep]
+  \item Évaluer un petit nombre de triplets initiaux (design latin
+    hypercube, $\sim 15$ points).
+  \item Ajuster un \textbf{processus gaussien} (GP) sur la surface
+    $S(k, \alpha, \omega)$ (critère de stabilité ou score de vote).
+  \item Choisir le prochain triplet à évaluer par un critère
+    d'\textbf{acquisition} (Expected Improvement) : explorer là où le GP
+    prédit un gain potentiel ou une forte incertitude.
+  \item Itérer jusqu'à convergence ($\sim 20$--$30$ évaluations au total).
+\end{enumerate}
+
+Cela réduit le nombre d'évaluations de $\sim 600$ (grid search complet) à
+$\sim 30$, rendant l'approche applicable même à de grands jeux de données.
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{Méta-calibration sur données labellisées}
+
+Les résultats montrent que $\alpha_{\text{optimal}} \geq 0.6$ sur les~4
+datasets testés (cf.~Table~\ref{tab:resultats}). Ce pattern pourrait être
+exploité pour \textbf{fixer} $\alpha$ à une valeur méta-calibrée, réduisant
+le problème 3D $(k, \alpha, \omega)$ à un problème 2D $(k, \omega)$. La
+robustesse de cette approche nécessite d'être validée sur un plus grand
+nombre de jeux de données fonctionnels labellisés (idéalement 15--20).
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{Enrichissement de l'architecture des distances}
+
+\begin{itemize}
+  \item \textbf{Dérivées d'ordre supérieur} : $D_2$ (accélération) pourrait
+    capturer des changements de courbure informatifs sur certains types de
+    données.
+  \item \textbf{Combinaison de $\Dw$ et $\DK$} : $\Dw$ (somme pondérée) et
+    $\DK$ (produit de noyaux) produisent des partitions différentes.
+    Explorer des stratégies d'ensemble qui agrègent les partitions issues de
+    plusieurs distances (\textbf{consensus clustering}).
+\end{itemize}
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{Application aux données non labellisées}
+
+Le test final de l'architecture sera son application à des données
+réelles non labellisées (par exemple, les profils de célérité du son du
+SHOM). L'enjeu est triple : (1)~déterminer automatiquement le nombre de
+clusters~$k$, (2)~sélectionner $(\alpha, \omega)$ sans vérité terrain, et
+(3)~valider la pertinence des clusters obtenus par expertise métier.
+Les pistes de recherche présentées ci-dessus (stabilité, vote entre
+critères, optimisation bayésienne, méta-calibration) visent précisément
+à résoudre ce verrou.
+
+\end{document}
