@@ -208,9 +208,12 @@ proches (niveaux similaires). $D_1$ les voit \textbf{très différentes}.
   D_s(i,j) = \left\| Z_i^{\text{std}} - Z_j^{\text{std}} \right\|_2
 \]
 
-où $Z^{\text{std}}$ est la standardisation variable par variable (moyenne~0,
-variance~1). $D_s$ mesure la proximité dans l'espace des variables classiques
-et \textbf{ignore totalement les courbes}.
+où $Z^{\text{std}}$ est la standardisation variable par variable
+(moyenne~0, variance~1). $D_s$ mesure la proximité dans l'espace des
+variables classiques et \textbf{ignore totalement les courbes}. Cette
+standardisation met toutes les composantes de $Z$ sur une échelle
+comparable avant qu'elles soient combinées au fonctionnel dans les
+stratégies mixtes.
 
 % ────────────────────────────────────────────────────────────────────────
 \subsection{Bilan : aucune ne suffit seule}
@@ -261,6 +264,12 @@ normaliser par le maximum :
   \qquad \alpha \in [0, 1]
 \]
 \end{keybox}
+
+La normalisation de $D_0$ et $D_1$ dans $[0,1]$ avant combinaison
+garantit qu'aucune des deux composantes (niveau ou forme) ne domine
+mécaniquement la distance. C'est une condition importante pour que les
+stratégies mixtes du niveau~2 ($\Dw$ et $\DK$) puissent pondérer
+proprement le fonctionnel par rapport au vectoriel.
 
 \subsection{Le curseur $\alpha$}
 
@@ -339,6 +348,83 @@ Deux stratégies pour les combiner.
 \textcolor{mix}{vert} = mixte.}
 \end{figure}
 
+Cette architecture peut se lire comme une \textbf{famille d'approches de
+type RS-PCA} : la partie fonctionnelle est d'abord réduite dans un
+espace de dimension finie (via FPCA et la distance $\Dp(\alpha)$), puis
+combinée avec la partie vectorielle $Z$ pour construire soit (i) un
+espace euclidien réduit où l'on applique k-means (stratégie A), soit
+(ii) des distances mixtes directement dans l'espace d'origine
+($\Dw$ et $\DK$, stratégies B et C). La différence principale entre A,
+B et C n'est donc pas la réduction elle-même (toujours fondée sur FPCA
+et $Z$), mais la manière dont on \textbf{exploite} cette réduction :
+par PCA+k-means dans $\R^{K+p}$ pour A, ou par des distances/noyaux
+pour B et C.
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{Résumé des trois stratégies de clustering}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{l p{3.2cm} p{3.4cm} p{3.4cm}}
+  \toprule
+  \textbf{Stratégie} & \textbf{Représentation} &
+  \textbf{Méthode de clustering} & \textbf{Rôle de la FPCA / distances} \\
+  \midrule
+  A (FPCA+Z) &
+  Vecteurs $W = [\xi\_{\text{FPCA}} \mid Z]$ standardisés &
+  k-means (distance euclidienne) &
+  FPCA sur les courbes, $Z$ standardisé, pas d'ACP sur $Z$ \\
+  B ($\Dw$) &
+  Matrice de distances $\Dw(\alpha,\omega)$ &
+  PAM (k-médoïdes) sur distances &
+  Combinaison pondérée de $\Dp(\alpha)$ (fonctionnel) et $D_s$ (vectoriel) \\
+  C ($\DK$) &
+  Matrice de distances $\DK(\alpha)$ &
+  PAM (k-médoïdes) sur distances &
+  Produit de noyaux issus de $\Dp(\alpha)$ et $D_s$ puis retour à une distance \\
+  \bottomrule
+\end{tabular}
+\caption{Résumé des trois stratégies : type de représentation, méthode de
+clustering et usage de la FPCA ou des distances.}
+\end{table}
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{Stratégie A : FPCA + $Z$ — concaténation dans $\R^{K+p}$}
+
+La première stratégie mixte correspond à une \textbf{RS-PCA (Reduced-Space
+PCA) au sens strict}. La chaîne est la suivante :
+\begin{enumerate}[nosep]
+  \item lissage des courbes $X_i(t)$ puis FPCA $\Rightarrow$ scores
+        fonctionnels $(\xi_{i1}, \ldots, \xi_{iK})$ ;
+  \item construction de $Z$ (géographie, spectres agrégés, etc.) et
+        standardisation variable par variable ;
+  \item concaténation des deux blocs dans un même vecteur ;
+  \item standardisation colonne par colonne, puis k-means avec distance
+        euclidienne.
+\end{enumerate}
+
+Concrètement, avant standardisation finale, on forme pour chaque
+individu :
+\[
+  U_i = (\xi_{i1}, \ldots, \xi_{iK}, Z_i) \in \R^{K+p},
+\]
+puis on applique k-means sur la matrice $W$ obtenue en concaténant les
+scores FPCA et $Z$, tous deux centrés-réduits. Autrement dit, la
+distance ``vue'' par la stratégie A est la distance euclidienne dans un
+espace réduit où chaque coordonnée (score fonctionnel ou variable de
+$Z$) contribue de manière comparable.
+
+Il n'y a \textbf{pas d'ACP supplémentaire sur $Z$} : les variables
+vectorielles sont uniquement standardisées. Ce choix est adapté aux cas
+étudiés ici, où $Z$ est de petite dimension et doit rester directement
+interprétable. La stratégie A sert ainsi de \textbf{baseline mixte}
+directe à comparer aux stratégies B et C, qui combinent les sources au
+niveau des distances (pondération) ou des noyaux (produit). Dans tout
+ce rapport, on se concentre sur cette approche RS-PCA enrichie par des
+distances fonctionnelles et mixtes adaptées au clustering et à l'étude
+des critères de sélection.
+
 % ────────────────────────────────────────────────────────────────────────
 \subsection{Stratégie B : $\Dw(\alpha, \omega)$ — pondération directe}
 
@@ -349,6 +435,13 @@ Deux stratégies pour les combiner.
   \qquad \alpha, \omega \in [0, 1]
 \]
 \end{keybox}
+
+Les deux entrées de cette formule sont donc des \textbf{distances déjà
+mise à l'échelle} : $\Dp(\alpha)$, construite à partir de $\tilde{D}_0$
+et $\tilde{D}_1$ dans $[0,1]$, et $\tilde{D}_s$, issue de $Z$
+standardisé. Le paramètre $\omega$ joue alors le rôle de curseur
+explicite entre la contribution fonctionnelle et la contribution
+vectorielle, sur une base devenue comparable.
 
 Deux ``boutons'' indépendants :
 
@@ -407,9 +500,14 @@ Au lieu de pondérer des distances, on passe par des \textbf{similarités}
   \DK(i,j) &= \sqrt{K(i,i) + K(j,j) - 2K(i,j)}.
 \end{align}
 
-Le produit $K = K_f \cdot K_s$ signifie que deux individus ne sont similaires
-\textbf{que si les deux sources le confirment}. Si $K_f \approx 0$ (courbes
-très différentes), alors $K \approx 0$ même si $K_s = 1$.
+Le choix $\sigma_f = \text{médiane}\{\Dp(\alpha)_{ij}\}$ et
+$\sigma_s = \text{médiane}\{D_s(i,j)\}$ joue le rôle de
+\textbf{mise à l'échelle automatique} dans chaque noyau : pour chaque
+source, des distances typiques correspondent à des similarités de taille
+intermédiaire. Le produit $K = K_f \cdot K_s$ signifie ensuite que deux
+individus ne sont similaires \textbf{que si les deux sources le
+confirment}. Si $K_f \approx 0$ (courbes très différentes), alors
+$K \approx 0$ même si $K_s = 1$.
 
 \textbf{Avantage :} pas de paramètre $\omega$ — grid search 1D sur $\alpha$
 uniquement (11 valeurs au lieu de 121).
@@ -426,6 +524,38 @@ uniquement (11 valeurs au lieu de 121).
 \end{tabular}
 \caption{Comparaison des deux stratégies de combinaison.}
 \end{table}
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{Notes méthodologiques : questions et arbitrages}
+
+Plusieurs choix méthodologiques ont été guidés par des questions
+pratiques :
+
+\begin{itemize}[nosep]
+  \item \textbf{Faut-il faire une ACP sur $Z$ ?} Pour l'instant, non :
+    $Z$ est de petite dimension et doit rester directement
+    interprétable. Une ACP classique sur $Z$ pourrait devenir utile dans
+    des contextes à très haute dimension, mais ce cas ne se pose pas
+    ici.
+  \item \textbf{Pourquoi k-means pour A et PAM pour B/C ?} La stratégie
+    A vit dans un espace euclidien réduit $\R^{K+p}$, où k-means est
+    naturel. Les stratégies B et C travaillent uniquement avec des
+    matrices de distances (issues de combinaisons ou de noyaux) :
+    PAM (k-médoïdes) est alors adapté car il ne requiert pas de
+    coordonnées explicites et accepte des distances non euclidiennes.
+  \item \textbf{Comment assurer l'équité entre sources dans B/C ?}
+    Côté fonctionnel, $D_0$ et $D_1$ sont normalisées dans $[0,1]$ puis
+    combinées en $\Dp(\alpha)$; côté vectoriel, $Z$ est standardisé
+    avant calcul de $D_s$, puis éventuellement renormalisé. Les
+    paramètres $\omega$ (dans $\Dw$) et les échelles $\sigma_f$,
+    $\sigma_s$ (dans $\DK$) jouent ensuite le rôle de curseurs explicites
+    entre fonctionnel et vectoriel.
+  \item \textbf{Pourquoi pas d'ACP dans B/C ?} Les distances de B et C
+    sont construites directement à partir des courbes lissées, de leurs
+    dérivées et de $Z$ standardisé. L'objectif est ici de comparer des
+    \emph{architectures de distances} (et des critères de sélection),
+    sans introduire de couche supplémentaire d'ACP hybride.
+\end{itemize}
 
 % ============================================================================
 \newpage
@@ -779,6 +909,27 @@ nombre de jeux de données fonctionnels labellisés (idéalement 15--20).
     Explorer des stratégies d'ensemble qui agrègent les partitions issues de
     plusieurs distances (\textbf{consensus clustering}).
 \end{itemize}
+
+% ────────────────────────────────────────────────────────────────────────
+\subsection{Vers une HFV-PCA (hybride fonctionnelle + vectorielle)}
+
+L'approche développée dans ce rapport repose sur une \textbf{RS-PCA} :
+les fonctions sont d'abord résumées par FPCA, puis concaténées avec les
+variables vectorielles $Z$ pour travailler dans un espace réduit
+$\R^{K+p}$, sur lequel on définit des distances adaptées au clustering.
+Une extension naturelle consiste à formuler l'analyse dans un espace de
+Hilbert \textbf{hybride} $\mathcal{H}_f \times \R^p$, où chaque
+composante principale est elle-même un objet mixte (fonction +
+vecteur). C'est l'idée des approches de type \textbf{HFV-PCA}
+(Hybrid Functional and Vector PCA).
+
+Dans ce cadre, les composantes principales seraient définies comme les
+vecteurs propres d'un opérateur de covariance sur
+$\mathcal{H}_f \times \R^p$, produisant un jeu unique de scores
+hybrides pour chaque individu. Ce chantier méthodologique dépasse le
+cadre de ce rapport, centré sur l'architecture de distances et les
+critères de sélection pour le clustering, mais il constitue une piste
+prioritaire pour des travaux ultérieurs.
 
 % ────────────────────────────────────────────────────────────────────────
 \subsection{Application aux données non labellisées}

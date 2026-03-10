@@ -36,6 +36,7 @@ La stabilité sélectionne-t-elle des \((\alpha, \omega)\) plus proches de l'ARI
 
 ## Statut
 
-- [ ] Protocole validé
-- [ ] Implémentation
-- [ ] Résultats sur les 4 datasets
+- [x] Protocole validé
+- [x] Implémentation (`run_stabilite.R`)
+- [x] Résultats Canadian (prototype) : stabilité-optimal (k=2, α=0.5, ω=0.5)
+- [ ] Résultats sur les 4 datasets (grille fine)
