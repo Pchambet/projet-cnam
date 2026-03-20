@@ -88,6 +88,7 @@ rownames(Ds) <- colnames(Ds) <- noms_stations
 # ═══════════════════════════════════════════════════════════════════════════
 
 # ─── Dw(α, ω) : distance mixte pondérée (stratégie B) ───
+# ω ∈ [0,1] : poids fonctionnel vs vectoriel dans la distance (≠ r en 02b = ratio HFV).
 cat("  Calcul de Dw (distance mixte, 2 paramètres α et ω)...\n")
 
 Ds_norm <- Ds / max(Ds)

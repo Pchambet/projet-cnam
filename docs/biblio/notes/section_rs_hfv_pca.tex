@@ -1,0 +1,427 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{geometry}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\geometry{margin=2.5cm}
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{0pt}
+
+\title{ACP de donnees hybrides :\\
+RS-PCA et HFV-PCA}
+\author{Version de travail pour relecture}
+\date{\today}
+
+\begin{document}
+\maketitle
+\sloppy
+
+\begin{abstract}
+Ce document est redige comme un mini-cours mathematique sur l'ACP de donnees
+hybrides (fonctionnelles + vectorielles), a partir de deux references :
+Ramsay \& Silverman (2005) et Jang (2021).
+L'objectif pedagogique est de comprendre :
+(i) le probleme central d'optimisation,
+(ii) la reduction en problemes propres calculables,
+(iii) le role de la ponderation inter-blocs.
+La version presente vise une qualite ``memoire/soutenance'' :
+statut exact vs tronque explicite, hypotheses mathematiques minimales,
+notations homogenes et points de vigilance.
+\end{abstract}
+
+\section{Introduction : le probleme mathematique a resoudre}
+
+Dans de nombreuses applications, une meme unite statistique est decrite par :
+\begin{itemize}[leftmargin=1.5em]
+  \item une composante \textbf{fonctionnelle} (courbe temporelle, signal, profil),
+  \item une composante \textbf{vectorielle} (variables cliniques, biomarqueurs, covariables usuelles).
+\end{itemize}
+
+Notons $Z_i=(Y_i,X_i)$ une observation hybride, avec
+$Y_i\in\mathcal{F}$ (espace fonctionnel) et $X_i\in\mathbb{R}^p$.
+On suppose les donnees centrees sans perte de generalite (WLOG),
+$\mathbb{E}[Z_i]=0$. Le but de l'ACP hybride est de trouver des directions
+$(\psi,\theta)$ qui maximisent la variance projetee
+\[
+\rho_i=\langle Z_i,\ (\psi,\theta)\rangle,
+\]
+sous contraintes d'orthonormalite.
+
+Le point difficile n'est pas seulement la dimension infinie de la partie
+fonctionnelle. C'est aussi l'heterogeneite d'echelle :
+\begin{itemize}[leftmargin=1.5em]
+  \item la norme L$^2$ des courbes et la norme euclidienne des vecteurs ne sont
+  pas naturellement comparables ;
+  \item sans ponderation, un bloc peut dominer artificiellement les composantes.
+\end{itemize}
+
+\subsection{Hypotheses minimales (cadre de cours)}
+\label{subsec:hyp-min}
+
+Dans l'esprit des deux references, les ingredients minimaux sont :
+\begin{itemize}[leftmargin=1.5em]
+  \item espace hilbertien separable pour la composante fonctionnelle ;
+  \item existence des moments d'ordre 2 ;
+  \item operateur de covariance auto-adjoint, positif et compact ;
+  \item centrage des observations ;
+  \item pour l'unicite des composantes : valeurs propres simples
+  (sinon, composantes definies a rotation pres dans le sous-espace propre).
+\end{itemize}
+
+Ce document est organise comme suit :
+\begin{itemize}[leftmargin=1.5em]
+  \item Section~\ref{sec:rappels} : rappels PCA/FPCA ;
+  \item Section~\ref{sec:rs} : RS-PCA (Ramsay \& Silverman, chap. 10.3) ;
+  \item Section~\ref{sec:hfv} : HFV-PCA (Jang, sec. 2.2 a 2.6) ;
+  \item Section~\ref{sec:comp} : comparaison mathematique fine.
+\end{itemize}
+
+\section{Rappels mathematiques : PCA et FPCA}
+\label{sec:rappels}
+
+\subsection{PCA vectorielle (dimension finie)}
+
+Soit $X\in\mathbb{R}^p$ centre, de covariance
+$C_X=\mathbb{E}[XX^\top]$. La premiere composante principale est solution de
+\[
+\max_{\|w\|=1}\ \mathrm{Var}(w^\top X)=\max_{\|w\|=1}\ w^\top C_X w.
+\]
+Par multiplicateur de Lagrange :
+\[
+C_Xw=\kappa w.
+\]
+Les composantes suivantes ajoutent des contraintes d'orthogonalite. Les scores
+sont $\gamma=w^\top X$.
+
+\subsection{FPCA (dimension infinie)}
+
+Soit $Y\in L^2(\mathcal{T})$, centre, de covariance
+$\sigma_Y(s,t)=\mathrm{Cov}(Y(s),Y(t))$. L'operateur de covariance associe est
+\[
+(C_Y f)(s)=\int_{\mathcal{T}}\sigma_Y(s,t)f(t)\,dt.
+\]
+L'analogue de la PCA est
+\[
+\max_{\|\phi\|_{L^2}=1}\ \mathrm{Var}\!\left(\int_{\mathcal{T}}Y(t)\phi(t)\,dt\right),
+\]
+menant a
+\[
+C_Y\phi=\tau\phi.
+\]
+Les scores fonctionnels sont
+\[
+\eta=\langle Y,\phi\rangle_{L^2}=\int_{\mathcal{T}}Y(t)\phi(t)\,dt.
+\]
+La decomposition de Karhunen-Loeve tronquee :
+\[
+Y(t)\approx \sum_{h=1}^L\eta_h\phi_h(t).
+\]
+
+\section{RS-PCA (Ramsay \& Silverman)}
+\label{sec:rs}
+
+\subsection{Espace hybride et score principal}
+
+Ramsay \& Silverman (chap. 10.3, eq. (10.1)-(10.4)) considerent des couples
+$z_i=(x_i,y_i)$, avec $x_i\in L^2(\mathcal{T})$ et $y_i\in\mathbb{R}^M$.
+Une direction principale hybride est $\zeta=(\xi,v)$ et le score de
+l'observation $i$ est
+\begin{equation}
+\eta_i=\int x_i(s)\,\xi(s)\,ds + y_i^\top v.
+\label{eq:rs-score}
+\end{equation}
+
+Le produit scalaire hybride non pondere est
+\begin{equation}
+\langle z^{(1)}, z^{(2)} \rangle
+=\int x^{(1)}(s)x^{(2)}(s)\,ds + {y^{(1)}}^\top y^{(2)}.
+\label{eq:rs-inner}
+\end{equation}
+La version ponderee est
+\begin{equation}
+\langle z^{(1)}, z^{(2)} \rangle
+=\int x^{(1)}(s)x^{(2)}(s)\,ds + C^2\,{y^{(1)}}^\top y^{(2)},
+\label{eq:rs-inner-weighted}
+\end{equation}
+ou $C>0$ regle l'equilibre fonctionnel/vectoriel.
+
+\subsection{Probleme d'optimisation sous-jacent}
+
+Comme en PCA classique, la premiere direction hybride est solution de
+\[
+\max_{\|\zeta\|=1}\ \mathrm{Var}(\langle z,\zeta\rangle),
+\]
+et les suivantes ajoutent les contraintes d'orthogonalite pour le meme produit
+scalaire. Le point cle est le choix de norme (donc de ponderation).
+
+\subsection{Reduction pratique a une PCA matricielle}
+
+Dans la presentation source, la partie fonctionnelle est projetee sur une base
+orthonormee $\{\varphi_k\}_{k=1}^K$ :
+\[
+x_i(t)\approx \sum_{k=1}^K c_{ik}\varphi_k(t),\qquad
+c_i=(c_{i1},\dots,c_{iK})^\top.
+\]
+On forme ensuite le vecteur augmente
+\[
+w_i=(c_i,\ y_i)\quad\text{ou}\quad w_i=(c_i,\ C y_i).
+\]
+L'eigenproblem devient celui de la covariance empirique
+\begin{equation}
+\widehat{\Sigma}_w=\frac{1}{N-1}\sum_{i=1}^N
+(w_i-\bar{w})(w_i-\bar{w})^\top.
+\label{eq:rs-cov}
+\end{equation}
+Donc RS-PCA est une PCA standard apres encodage de la partie fonctionnelle en
+coefficients.
+
+\paragraph{Remarque base orthonormee vs base generale}
+Si la base n'est pas orthonormee (p. ex. splines generales), le produit
+scalaire entre fonctions en coefficients passe par la matrice de Gram
+$G_{kl}=\langle \varphi_k,\varphi_l\rangle_{L^2}$, et
+$\langle x_i,x_j\rangle=c_i^\top G c_j$.
+
+\subsection{Choix de ponderation discute par RS}
+
+Ramsay \& Silverman discutent notamment
+\begin{equation}
+C^2=
+\frac{\sum_i\|x_i-\bar{x}\|_{L^2}^2}{\sum_i\|y_i-\bar{y}\|_2^2},
+\label{eq:rs-c2}
+\end{equation}
+qui egalise globalement la variance des deux blocs.
+
+\subsection{Interpretation mathematique de la ponderation}
+
+Le passage de \eqref{eq:rs-inner} a \eqref{eq:rs-inner-weighted} est
+equivalent a un preconditionnement lineaire
+\[
+y_i\mapsto C y_i,\qquad v\mapsto C^{-1}v
+\]
+dans l'espace vectoriel. On ne change pas le principe de PCA ; on change la
+geometrie du probleme.
+
+\subsection{Limites discutees dans Jang (presentation neutre)}
+
+Jang (2021, introduction) souligne que cette voie \emph{peut} etre sensible :
+\begin{enumerate}[leftmargin=1.5em]
+  \item au choix du systeme de base ;
+  \item aux donnees fonctionnelles sparse/irregulieres (coefficients plus
+  instables).
+\end{enumerate}
+
+\section{HFV-PCA (Jang, 2021)}
+\label{sec:hfv}
+
+\subsection{Espace hybride et operateur de covariance}
+
+Jang (sec. 2.2, eq. (3)-(5)) construit l'espace
+\[
+\mathcal{H}=\mathcal{F}\times\mathbb{R}^p,
+\]
+avec produit scalaire pondere
+\begin{equation}
+\langle (f_1,v_1),(f_2,v_2)\rangle_{\mathcal{H}}
+=\langle f_1,f_2\rangle_{\mathcal{F}}+\omega\,v_1^\top v_2,
+\label{eq:hfv-inner}
+\end{equation}
+ou $\omega>0$ traite l'heterogeneite d'unites.
+
+Pour $Z=(Y,X)$ centre, l'operateur de covariance est
+\[
+K=\mathbb{E}\big[(Z\otimes Z)\big].
+\]
+L'ACP hybride est la decomposition spectrale
+\begin{equation}
+K=\sum_{m\ge1}\lambda_m\,\xi_m\otimes\xi_m,\qquad
+Z=\sum_{m\ge1}\rho_m\,\xi_m,
+\label{eq:hfv-decomp}
+\end{equation}
+avec scores $\rho_m=\langle Z,\xi_m\rangle_{\mathcal{H}}$.
+
+\subsection{Structure explicite de la covariance hybride}
+
+L'apport important de Jang est d'ecrire $K$ via trois noyaux :
+\begin{itemize}[leftmargin=1.5em]
+  \item covariance fonctionnelle $\sigma_Y$ ;
+  \item covariance vectorielle $\sigma_X$ ;
+  \item covariance croisee $\sigma_{YX}$.
+\end{itemize}
+
+\subsection{Lien cle avec FPCA/PCA (Theoreme 4)}
+
+Jang (sec. 2.4, Theorem 4) montre qu'en tronquant FPCA et PCA a $(L,J)$
+composantes, on construit
+\begin{equation}
+V=
+\begin{pmatrix}
+V_y & V_{yx}\\
+V_{xy} & V_x
+\end{pmatrix},
+\label{eq:hfv-block}
+\end{equation}
+avec
+\[
+V_y=\mathrm{Cov}(\eta)\in\mathbb{R}^{L\times L},\quad
+V_{yx}=\mathrm{Cov}(\eta,\gamma)\in\mathbb{R}^{L\times J},
+\]
+\[
+V_{xy}=V_{yx}^\top\in\mathbb{R}^{J\times L},\quad
+V_x=\mathrm{Cov}(\gamma)\in\mathbb{R}^{J\times J}.
+\]
+
+Point de rigueur : les valeurs propres de $V$ correspondent exactement aux
+valeurs propres de l'operateur \emph{tronque}. Elles approchent les valeurs
+propres de l'operateur complet quand $L$ et $J$ augmentent (sec. 2.6).
+
+Si $e_m=(c_m^\top,d_m^\top)^\top$ est un vecteur propre de $V$, alors
+\begin{equation}
+\psi_m(t)=\sum_{h=1}^L c_{mh}\phi_h(t),\qquad
+\theta_m=\sum_{j=1}^J d_{mj}w_j,
+\label{eq:hfv-components}
+\end{equation}
+et le score hybride associe est
+\begin{equation}
+\rho_{im}=\sum_{h=1}^L c_{mh}\eta_{ih}+\sum_{j=1}^J d_{mj}\gamma_{ij}.
+\label{eq:hfv-score}
+\end{equation}
+
+\subsection{Protocole d'estimation}
+
+Pipeline pratique (Jang, sec. 2.5) :
+\begin{enumerate}[leftmargin=1.5em]
+  \item estimer FPCA/MFPCA sur $\{Y_i\}$ et garder $L$ composantes ;
+  \item estimer PCA sur $\{X_i\}$ et garder $J$ composantes ;
+  \item former $\chi_i=(\eta_{i1},\dots,\eta_{iL},\gamma_{i1},\dots,\gamma_{iJ})$ ;
+  \item estimer $\widehat{V}$ et diagonaliser ;
+  \item reconstruire $(\psi_m,\theta_m)$ et $\rho_{im}$ par
+  \eqref{eq:hfv-components}-\eqref{eq:hfv-score}.
+\end{enumerate}
+
+\subsection{Ponderation par variance relative}
+
+Choix data-driven propose :
+\begin{equation}
+\omega=
+\frac{\sum_i\|Y_i-\bar{Y}\|_{\mathcal{F}}^2}{\sum_i\|X_i-\bar{X}\|_2^2},
+\label{eq:hfv-omega}
+\end{equation}
+equivalent a $X_i\mapsto \sqrt{\omega}X_i$.
+
+\paragraph{Statut de $\omega$}
+Ce choix est raisonnable (analogue a une standardisation inter-blocs), mais ne
+doit pas etre presente comme ``optimal universel''.
+
+\paragraph{Choix pratique de $L,J,M$}
+Les troncatures $(L,J)$ puis $M$ sont souvent choisies par PVE (pourcentage de
+variance expliquee), avec un compromis biais/variance.
+
+\section{Comparaison mathematique RS-PCA vs HFV-PCA}
+\label{sec:comp}
+
+\subsection{Formulation du probleme}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Commun} : maximiser une variance projetee hybride sous
+  contraintes d'orthonormalite.
+  \item \textbf{Difference} : RS reduit vite a une PCA augmentee ; HFV part d'un
+  operateur hybride et explicite le lien tronque/complet.
+\end{itemize}
+
+\subsection{Lecture rapide en 5 points}
+\begin{itemize}[leftmargin=1.5em]
+  \item Objet : meme cible (donnees hybrides).
+  \item Moteur : RS = PCA sur representation ; HFV = covariance hybride.
+  \item Estimation : RS sur coefficients de base ; HFV via scores FPCA/PCA et $V$.
+  \item Ponderation : $C^2$ (RS) et $\omega$ (HFV) jouent le meme role geometrique.
+  \item Theorie : HFV explicite mieux statut tronque et convergence.
+\end{itemize}
+
+\subsection{Intuition geometrique de la ponderation}
+\begin{itemize}[leftmargin=1.5em]
+  \item Sans ponderation : la direction principale suit le bloc dominant.
+  \item Avec ponderation : on change la metrique pour comparer des variations
+  de nature differente.
+  \item Objectif : equilibrer l'analyse, pas imposer une egalite artificielle.
+\end{itemize}
+
+\subsection{Mini-exemple jouet (K=2, p=2)}
+\label{subsec:jouet}
+
+Supposons deux scores fonctionnels $\eta_1,\eta_2$ et deux scores vectoriels
+$\gamma_1,\gamma_2$. Alors
+\[
+\chi=(\eta_1,\eta_2,\gamma_1,\gamma_2)^\top,\qquad
+V=\mathrm{Cov}(\chi)\in\mathbb{R}^{4\times4}.
+\]
+Si les blocs croises sont nuls, on retrouve deux ACP quasi separees. Si les
+blocs croises sont forts, les directions propres melangent les deux modalites :
+c'est exactement le but de l'ACP hybride.
+
+\section{Conclusion mathematique}
+
+Les deux methodes poursuivent la meme idee geometrique :
+une ACP commune sur un espace produit hybride.
+RS-PCA donne une route directe operationnelle.
+HFV-PCA formalise la covariance hybride et explicite mieux
+le passage du modele tronque au modele complet.
+
+Message cle :
+\begin{itemize}[leftmargin=1.5em]
+  \item sans ponderation inter-blocs, on deforme le probleme ;
+  \item sans traitement fonctionnel adapte, on biaise la fusion.
+\end{itemize}
+
+\section{Erreurs frequentes a eviter}
+\begin{itemize}[leftmargin=1.5em]
+  \item confondre ``exact sur modele tronque'' et ``exact sur modele complet'' ;
+  \item oublier le centrage avant covariance/scores ;
+  \item melanger coefficients de base (RS canonique) et scores FPCA (pipeline HFV) ;
+  \item oublier la matrice de Gram si base non orthonormee ;
+  \item presenter $\omega$ comme optimal universel.
+\end{itemize}
+
+\section{Guide d'etude (travail personnel)}
+
+Pour consolider :
+\begin{enumerate}[leftmargin=1.5em]
+  \item redemontrer la maximisation de variance en PCA ;
+  \item expliquer le passage FPCA infinie dimension $\rightarrow$ troncature ;
+  \item montrer que $C^2$ / $\omega$ equivaut a un rescaling ;
+  \item interpreter \eqref{eq:hfv-score} comme meta-score.
+\end{enumerate}
+
+\section{Pistes pour la prochaine version}
+\begin{itemize}[leftmargin=1.5em]
+  \item ajouter une preuve guidee du Theoreme 4 ;
+  \item ajouter un encadre ``choix de troncature'' ;
+  \item integrer une version module collable dans le rapport principal.
+\end{itemize}
+
+\section{Validation finale (checklist jury-ready)}
+\begin{itemize}[leftmargin=1.5em]
+  \item [OK] Exactitude du statut theorique (tronque vs complet) explicitee.
+  \item [OK] Hypotheses minimales du cadre mathematique explicites.
+  \item [OK] Centrage des donnees harmonise dans tout le document.
+  \item [OK] Definitions de $V_y$, $V_{yx}$, $V_x$ et dimensions ajoutees.
+  \item [OK] Distinction claire RS canonique vs pipeline HFV.
+  \item [OK] Remarque base orthonormee vs base generale (matrice de Gram).
+  \item [OK] Role de $\omega$ precise (data-driven, non universellement optimal).
+  \item [OK] Mini-exemple jouet ajoute pour lecture operationnelle.
+  \item [OK] Citations localisees aux sections/equations cles des sources.
+  \item [OK] PDF compile sans erreur ; mise en page stabilisee (hors warning
+  systeme de cesure francaise de l'installation TeX).
+\end{itemize}
+
+\section*{References minimales}
+\begin{itemize}[leftmargin=1.5em]
+  \item Ramsay, J. O., \& Silverman, B. W. (2005). \emph{Functional Data Analysis} (2nd ed.), chap. 10.3 (eq. (10.1)-(10.4)).
+  \item Jang, J. H. (2021). Principal component analysis of hybrid functional and vector data. \emph{Statistics in Medicine}, sec. 2.2-2.6 (eq. (3)-(10), Theorem 4).
+\end{itemize}
+
+\end{document}

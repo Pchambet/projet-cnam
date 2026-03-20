@@ -17,7 +17,7 @@ library(mclust)
 library(fpc)
 
 if (!exists("DATASET")) DATASET <- "canadian"
-# Valeurs par défaut = mêmes que run_all_stability.R (B=150, grille 21×21)
+# Valeurs par défaut : B=150, grille 21×21
 if (!exists("B_NSELECT")) B_NSELECT <- 150
 if (!exists("ALPHAS_NB")) ALPHAS_NB <- seq(0, 1, by = 0.05)
 if (!exists("OMEGAS_NB")) OMEGAS_NB <- seq(0, 1, by = 0.05)

@@ -1,0 +1,274 @@
+% ============================================================================
+% Théorie : stabilité, bootstrap et choix du nombre de clusters
+% ============================================================================
+% Références : Dudoit-Fridlyand (2002, 2003), Wang (2010), Fang-Wang (2012)
+% ============================================================================
+
+\documentclass[11pt, a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{hyperref}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\mathbb{P}}
+
+\title{Théorie : stabilité du clustering, bootstrap et choix de $k$}
+\author{Document de travail — projet Mars}
+\date{Mars 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% ============================================================================
+\section{Contexte et problème}
+% ============================================================================
+
+On dispose de $n$ observations $\{x_1, \ldots, x_n\}$ et d'un algorithme de clustering $\mathcal{A}$ qui, pour un entier $k$, produit une partition en $k$ clusters. Le problème central : \textbf{comment choisir $k$} sans vérité terrain ?
+
+Les critères classiques (silhouette, gap statistic, Calinski-Harabasz, etc.) ont des biais connus. En particulier, les méthodes basées sur la \textbf{stabilité} (reproductibilité sous perturbation des données) peuvent biaiser vers $k=2$ : moins de clusters $\Rightarrow$ partitions plus stables mécaniquement.
+
+Ce document expose la théorie derrière quatre approches de la littérature et leur lien avec notre protocole actuel.
+
+% ============================================================================
+\section{Notre protocole actuel (maximisation de l'ARI)}
+% ============================================================================
+
+\subsection{Algorithme}
+
+Pour chaque triplet $(k, \alpha, \omega)$ :
+\begin{enumerate}
+  \item Calculer la partition $\mathcal{C}$ sur les $n$ individus (PAM avec $D_w(\alpha, \omega)$).
+  \item Répéter $B$ fois :
+  \begin{itemize}
+    \item Sous-échantillonner $80\%$ des individus (sans remise) $\to$ ensemble $I_b$.
+    \item Calculer $\mathcal{C}_b^*$ = PAM sur $I_b$.
+    \item $\text{ARI}_b = \text{ARI}(\mathcal{C}_{|I_b}, \mathcal{C}_b^*)$ (restriction de $\mathcal{C}$ aux individus de $I_b$).
+  \end{itemize}
+  \item Stabilité : $\text{Stab}(k, \alpha, \omega) = \frac{1}{B}\sum_{b=1}^B \text{ARI}_b$.
+\end{enumerate}
+On retient le triplet qui \textbf{maximise} $\text{Stab}$.
+
+\subsection{Problème identifié}
+
+Avec $k=2$, il n'y a que deux clusters. La comparaison ARI entre $\mathcal{C}$ et $\mathcal{C}_b^*$ porte sur deux partitions binaires : les désaccords sont structurellement limités. Avec $k=4$, quatre clusters peuvent se réarranger de bien plus de façons sous un sous-échantillonnage $\Rightarrow$ ARI plus bas en moyenne.
+
+\textbf{Conséquence} : $\text{Stab}(k=2) \geq \text{Stab}(k=4)$ même quand la vraie structure a 4 classes. Biais systématique vers les petits $k$.
+
+% ============================================================================
+\section{Clest (Dudoit \& Fridlyand, 2002)}
+% ============================================================================
+\label{sec:clest}
+
+\subsection{Idée centrale}
+
+Clest repose sur la \textbf{prédictibilité} des affectations de clusters : si la structure est réelle, un classifieur entraîné sur un sous-ensemble doit prédire correctement les labels obtenus par clustering sur un autre sous-ensemble.
+
+On ne compare pas directement deux partitions ; on compare \emph{prédiction} vs \emph{clustering} sur un même ensemble test.
+
+\subsection{Procédure détaillée}
+
+Pour chaque $k \in \{2, \ldots, M\}$ :
+
+\textbf{Étape 1 (répétée $B$ fois)} :
+\begin{enumerate}
+  \item Diviser $\mathcal{L}$ en learning $\mathcal{L}_b$ et test $\mathcal{T}_b$ (non chevauchants).
+  \item Clustering sur $\mathcal{L}_b$ $\to$ partition $\mathcal{C}(\cdot; \mathcal{L}_b)$.
+  \item Construire un classifieur $C(\cdot; \mathcal{L}_b)$ à partir de $\mathcal{L}_b$ et de ses labels de cluster.
+  \item Appliquer $C$ sur $\mathcal{T}_b$ $\to$ labels prédits $\hat{Y}$.
+  \item Appliquer le clustering sur $\mathcal{T}_b$ $\to$ partition $\mathcal{C}(\cdot; \mathcal{T}_b)$.
+  \item Calculer un indice de similarité $s_{k,b}$ entre $\hat{Y}$ et $\mathcal{C}(\cdot; \mathcal{T}_b)$ sur $\mathcal{T}_b$ (ex. Fowlkes-Mallows, Rand ajusté).
+\end{enumerate}
+
+\textbf{Étape 2} : $t_k = \text{mediane}(s_{k,1}, \ldots, s_{k,B})$.
+
+\textbf{Étape 3} : Générer $B_0$ jeux de données sous l'hypothèse nulle $H_0 : K=1$ (ex. uniforme sur l'enveloppe des données). Pour chacun, répéter les étapes 1--2 $\to$ $t_{k,1}^0, \ldots, t_{k,B_0}^0$.
+
+\textbf{Étape 4} :
+\begin{align*}
+  \bar{t}_k^0 &= \frac{1}{B_0}\sum_{b=1}^{B_0} t_{k,b}^0, \quad
+  d_k = t_k - \bar{t}_k^0, \quad
+  p_k = \frac{1}{B_0}\#\{b : t_{k,b}^0 \geq t_k\}.
+\end{align*}
+
+\textbf{Sélection} :
+\[
+  \mathcal{K}^- = \{k : p_k \leq p_{\max},\; d_k \geq d_{\min}\}, \quad
+  \hat{K} = \begin{cases} 1 & \text{si } \mathcal{K}^- = \emptyset \\ \argmax_{k \in \mathcal{K}^-} d_k & \text{sinon} \end{cases}
+\]
+Paramètres typiques : $p_{\max}=0.05$, $d_{\min}=0.05$.
+
+\subsection{Calibration par la nullité}
+
+La clé de Clest : on ne compare pas $t_k$ entre différents $k$ directement. On compare $t_k$ à son espérance sous $H_0$ (pas de clusters). Un $k$ avec des clusters artificiels aura $t_k \approx \bar{t}_k^0$. Un $k$ avec une structure réelle aura $t_k \gg \bar{t}_k^0$ $\Rightarrow$ $d_k$ grand.
+
+Cela évite le biais « plus de clusters = plus instable » car la calibration est faite \emph{par $k$} via la référence nulle.
+
+\subsection{Classifieur utilisé}
+
+Dans l'article : DLDA (Diagonal Linear Discriminant Analysis), i.e. règle de Bayes avec covariances diagonales et égales. Pour PAM sur distances : on peut utiliser l'affectation au médoïde le plus proche comme « classifieur ».
+
+% ============================================================================
+\section{Bagging (Dudoit \& Fridlyand, 2003)}
+% ============================================================================
+
+\subsection{Objectif}
+
+Le bagging en clustering ne vise pas à choisir $k$, mais à \textbf{améliorer} et \textbf{évaluer} la précision d'une procédure de clustering donnée (avec $k$ fixé).
+
+\subsection{Principe}
+
+L'instabilité des algorithmes de clustering (petite perturbation $\Rightarrow$ grande variation des résultats) est exploitée positivement :
+\begin{enumerate}
+  \item Générer $B$ échantillons bootstrap (tirages avec remise de taille $n$).
+  \item Sur chaque échantillon, obtenir une partition.
+  \item Agréger les partitions (ex. vote majoritaire pour chaque paire d'observations, ou consensus par matrice de co-association).
+\end{enumerate}
+
+\subsection{Lien avec notre protocole}
+
+Notre sous-échantillonnage à 80\% \emph{sans} remise est différent du bootstrap classique (avec remise). Le bootstrap à 80\% sans remise correspond à une « sous-échantillonnage aléatoire » ; la fraction attendue d'individus dans un bootstrap est $\approx 1 - e^{-1} \approx 63\%$.
+
+Notre approche mesure la stabilité (ARI moyen) plutôt que d'agréger les partitions. Le lien conceptuel : les deux exploitent la variabilité des partitions sous resampling.
+
+% ============================================================================
+\section{Wang (2010) : instabilité et validation croisée}
+% ============================================================================
+
+\subsection{Définition de l'instabilité}
+
+Soit $\mathcal{A}$ un algorithme de clustering. Pour un $k$ fixé, l'\textbf{instabilité} est :
+\[
+  \text{Inst}(k) = \E\left[ \text{disaccord}(\mathcal{A}(\mathcal{L}_1, k), \mathcal{A}(\mathcal{L}_2, k)) \right]
+\]
+où $\mathcal{L}_1, \mathcal{L}_2$ sont deux échantillons indépendants de même loi que les données, et « disaccord » mesure la dissimilarité entre les deux partitions (sur l'intersection ou sur une population de référence).
+
+\subsection{Critère de sélection}
+
+Wang propose de choisir $\hat{k}$ qui \textbf{minimise} l'instabilité estimée :
+\[
+  \hat{k} = \argmin_{k} \widehat{\text{Inst}}(k).
+\]
+
+\subsection{Estimation par validation croisée}
+
+\begin{enumerate}
+  \item Diviser les données en $V$ plis (ex. $V=2$).
+  \item Pour chaque paire de plis $(\mathcal{L}_1, \mathcal{L}_2)$ :
+  \begin{itemize}
+    \item Clustérer $\mathcal{L}_1$ et $\mathcal{L}_2$ séparément.
+    \item Pour classer les points de $\mathcal{L}_2$ selon les clusters de $\mathcal{L}_1$ : affecter au cluster le plus proche (médoïde, centroid, etc.).
+    \item Mesurer le désaccord entre cette affectation et le clustering natif de $\mathcal{L}_2$.
+  \end{itemize}
+  \item Moyenner sur les paires $\to$ $\widehat{\text{Inst}}(k)$.
+\end{enumerate}
+
+\subsection{Consistance}
+
+Sous des conditions de régularité, Wang établit la \textbf{consistance} du critère : $\hat{k} \to K_0$ en probabilité quand $n \to \infty$, où $K_0$ est le « vrai » nombre de clusters.
+
+% ============================================================================
+\section{Fang \& Wang (2012) : bootstrap}
+% ============================================================================
+
+\subsection{Idée}
+
+Même critère que Wang (minimiser l'instabilité), mais l'estimation se fait par \textbf{bootstrap} au lieu de la validation croisée.
+
+\subsection{Procédure}
+
+Pour chaque $k$ :
+\begin{enumerate}
+  \item Répéter $B$ fois :
+  \begin{itemize}
+    \item Tirer deux échantillons bootstrap $\mathcal{B}_1, \mathcal{B}_2$ (avec remise, taille $n$).
+    \item Clustérer $\mathcal{B}_1$ et $\mathcal{B}_2$ avec $k$ clusters.
+    \item Les points de $\mathcal{B}_2$ peuvent ne pas être dans $\mathcal{B}_1$ : il faut les \emph{classifier} dans les clusters de $\mathcal{B}_1$ (ex. affectation au centroid/médoïde le plus proche).
+    \item Calculer une mesure de désaccord entre les deux partitions (sur les points communs ou via la classification).
+  \end{itemize}
+  \item $\widehat{\text{Inst}}(k) = \frac{1}{B}\sum_{b=1}^B \text{disaccord}_b$.
+\end{enumerate}
+
+$\hat{k} = \argmin_k \widehat{\text{Inst}}(k)$.
+
+\subsection{Différence avec notre protocole}
+
+\begin{center}
+\begin{tabular}{lll}
+  \hline
+  & Notre protocole & Fang-Wang \\
+  \hline
+  Critère & Maximiser ARI (stabilité) & Minimiser instabilité \\
+  Référence & Partition complète $\mathcal{C}$ & Paires de bootstrap \\
+  Comparaison & $\mathcal{C}_{|I_b}$ vs $\mathcal{C}_b^*$ & $\mathcal{C}_1$ vs $\mathcal{C}_2$ (après classification) \\
+  Biais $k$ & Favorise petits $k$ & Calibration différente \\
+  \hline
+\end{tabular}
+\end{center}
+
+Dans Fang-Wang, les deux partitions sont sur des échantillons \emph{indépendants} (bootstrap). Le désaccord est mesuré de façon symétrique. Il n'y a pas de partition « de référence » fixe, ce qui peut réduire le biais vers $k=2$.
+
+\subsection{Implémentation R}
+
+La fonction \texttt{nselectboot} du package \texttt{fpc} implémente cette approche. Elle accepte des matrices de distances (\texttt{dist}) et des méthodes comme \texttt{claraCBI} (PAM) ou \texttt{disthclustCBI} (clustering hiérarchique).
+
+% ============================================================================
+\section{clusterboot (fpc) : stabilité par Jaccard}
+% ============================================================================
+
+\subsection{Méthode}
+
+\texttt{clusterboot} évalue la stabilité de chaque \emph{cluster} individuellement :
+\begin{enumerate}
+  \item Clustérer les données $\to$ clusters $C_1, \ldots, C_k$.
+  \item Répéter $B$ fois : bootstrap (ou subset), reclustérer.
+  \item Pour chaque cluster $C_i$ de la partition initiale, calculer le coefficient de Jaccard avec le cluster le plus similaire dans chaque partition bootstrap.
+  \item Stabilité du cluster $i$ = moyenne des Jaccards.
+\end{enumerate}
+
+Un cluster est considéré « dissous » si son Jaccard max tombe sous 0.5.
+
+\subsection{Différence avec ARI}
+
+L'ARI compare deux \emph{partitions} globales. Le Jaccard cluster-wise compare chaque cluster à son meilleur correspondant. Les deux peuvent réagir différemment au choix de $k$.
+
+% ============================================================================
+\section{Synthèse et recommandations}
+% ============================================================================
+
+\subsection{Comparaison des approches}
+
+\begin{enumerate}
+  \item \textbf{Clest} : Calibration par nullité. Peut mieux discriminer les vrais $k$ car $d_k$ est comparé à $E[t_k | H_0]$. Coût : nécessite génération de données sous $H_0$ et un classifieur.
+  \item \textbf{Fang-Wang (nselectboot)} : Minimise l'instabilité. Pas de partition de référence fixe. Implémentation directe dans \texttt{fpc}.
+  \item \textbf{Wang (CV)} : Similaire à Fang-Wang, avec CV au lieu du bootstrap. Consistance théorique.
+  \item \textbf{Notre protocole} : Simple, mais biais vers $k=2$ car ARI entre partition complète et bootstrap favorise les petits $k$.
+\end{enumerate}
+
+\subsection{Pistes pour notre expérience}
+
+\begin{enumerate}
+  \item Tester \texttt{nselectboot} avec \texttt{claraCBI} sur nos matrices $D_w(\alpha, \omega)$ pour une grille de $(\alpha, \omega)$ fixés (ex. meilleur couple actuel).
+  \item Implémenter une variante Clest : split train/test, PAM sur train, affectation au médoïde le plus proche sur test, indice FM entre prédiction et clustering test.
+  \item Comparer le $k$ sélectionné par chaque méthode sur nos 4 datasets.
+  \item Envisager un \textbf{vote} entre critères (stabilité ARI, nselectboot, silhouette, gap) pour le choix de $k$.
+\end{enumerate}
+
+% ============================================================================
+\section{Références bibliographiques}
+% ============================================================================
+
+\begin{enumerate}
+  \item Dudoit, S., Fridlyand, J. (2002). A prediction-based resampling method for estimating the number of clusters in a dataset. \textit{Genome Biology}, 3(7), research0036.
+  \item Dudoit, S., Fridlyand, J. (2003). Bagging to improve the accuracy of a clustering procedure. \textit{Bioinformatics}, 19(9), 1090--1099.
+  \item Wang, J. (2010). Consistent selection of the number of clusters via crossvalidation. \textit{Biometrika}, 97(4), 893--904.
+  \item Fang, Y., Wang, J. (2012). Selection of the number of clusters via the bootstrap method. \textit{Computational Statistics and Data Analysis}, 56(3), 468--477.
+  \item Hennig, C. (2007). Cluster-wise assessment of cluster stability. \textit{Computational Statistics and Data Analysis}, 52(1), 258--271. (clusterboot)
+\end{enumerate}
+
+\end{document}

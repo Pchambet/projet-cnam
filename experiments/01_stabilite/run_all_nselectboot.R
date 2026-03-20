@@ -11,7 +11,7 @@ cat("═════════════════════════
 cat("  EXPÉRIENCE 01 — NSELECTBOOT (Fang-Wang) sur 4 datasets\n")
 cat("══════════════════════════════════════════════════════════════════════\n\n")
 
-# Mêmes paramètres que run_all_stability.R pour comparaison équitable
+# Grille 21×21, B=150 (alignée avec l’ancien protocole de comparaison)
 DATASETS <- c("canadian", "aemet", "growth", "tecator")
 B_NSELECT <- 150                    # idem stabilité
 ALPHAS_NB <- seq(0, 1, by = 0.05)  # 21×21, idem stabilité

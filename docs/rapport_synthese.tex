@@ -88,10 +88,166 @@ conclusions méthodologiques qui en découlent — notamment la découverte que
 les dérivées sont systématiquement informatives lorsqu'on optimise par ARI
 ($\alpha_{\text{ARI-optimal}} \geq 0.6$ sur 4/4 datasets) et l'identification du critère de sélection des paramètres
 comme verrou principal.
+Un complément sur \textbf{données simulées} (expérience~3) compare les mêmes
+familles de méthodes sous un générateur contrôlé ($p = 20$, répétitions sur
+les graines) ; l'ARI y sert uniquement à l'évaluation, pas au choix des
+hyperparamètres.
 \end{abstract}
 
 \tableofcontents
 \newpage
+
+\section{Introduction : Le défi des données mixtes et les limites de l'existant}
+
+\subsection{Le problème concret : Faire dialoguer deux mondes}
+Dans la vraie vie, qu'il s'agisse de médecine ou d'ingénierie, un phénomène n'est jamais décrit par un seul type de mesure. L'objectif de ce cours est d'apprendre à modéliser mathématiquement un individu défini par deux objets fondamentalement différents :
+\begin{itemize}
+    \item \textbf{Les données fonctionnelles ($Y$)} : Ce sont des processus continus dans le temps. Pensez-y comme à un film. En mathématiques, on les traite comme des fonctions de dimension infinie.
+    \item \textbf{Les données vectorielles ($X$)} : Ce sont des variables statiques (âge, poids, scores cliniques). Pensez-y comme à une photographie. Elles vivent dans un espace classique de dimension finie $\mathbb{R}^p$.
+\end{itemize}
+Prenons le diagnostic de l'obstruction rénale : on a d'un côté la courbe d'activité du rein (le film), et de l'autre les analyses de sang du patient (la photographie). Faire deux analyses séparées (une sur les courbes, une sur les variables) est une erreur stratégique : on perd l'interaction entre les deux. On cherche donc à capturer leur variabilité \textit{conjointe}.
+
+\subsection{L'approche RS-PCA}
+La méthode de Ramsay et Silverman permet de forcer la courbe à devenir un vecteur pour pouvoir utiliser une ACP classique. 
+La recette, en deux étapes, était la suivante :
+\begin{enumerate}
+    \item \textbf{Le pré-lissage (Pre-smoothing)} : On résume la courbe continue par un petit nombre de coefficients mathématiques (en utilisant des bases de fonctions comme les B-splines ou Fourier). 
+    \item \textbf{La concaténation} : On colle ces coefficients à la suite des variables statiques $X$ pour obtenir un seul grand vecteur, puis on lance une ACP standard.
+\end{enumerate}
+
+\subsection{Pourquoi ce modèle s'effondre dans la réalité}
+L'approche RS-PCA est intuitive, mais elle se brise sur deux murs dès qu'on sort de la théorie :
+\begin{itemize}
+    \item \textbf{Le biais du dictionnaire} : Le résultat dépend entièrement du choix de la base mathématique utilisée pour le lissage. Si vous choisissez un mauvais outil pour résumer la courbe, toute votre analyse finale sera faussée.
+    \item \textbf{Le mur des données incomplètes (SIR - Sparse and Irregular)} : Dans un vrai protocole, les mesures sont souvent chaotiques. Si la courbe est "à trous", il est impossible de calculer des coefficients de lissage fiables : leur variance explose vers l'infini. Le modèle recrache alors du bruit.
+\end{itemize}
+Il fallait donc inventer un modèle intellectuellement plus honnête, qui accepte la courbe telle qu'elle est, sans la forcer à devenir un vecteur.
+
+\section{Le changement de paradigme : L'Espace Hybride $\mathbb{H}$}
+
+\subsection{L'objet unifié : Accepter l'hétérogénéité}
+L'Analyse en Composantes Principales Hybride (HFV-PCA) change de perspective de manière radicale. Plutôt que de dégrader la donnée pour l'adapter à un vieil outil, on crée un nouvel espace mathématique sur-mesure.
+
+On définit l'individu comme un objet hybride $Z = (Y, X)$. Ce n'est plus une courbe d'un côté et un vecteur de l'autre, c'est une paire indissociable. Cet objet vit dans un espace de Hilbert spécifique $\mathbb{H}$, qui est littéralement la fusion du monde continu ($L^2$) et du monde discret ($\mathbb{R}^p$).
+
+\subsection{Le produit scalaire}
+Pour faire une ACP, la machine a besoin de calculer des variances (l'inertie). Pour cela, il lui faut une règle de mesure géométrique : un produit scalaire.
+Le défi est de fusionner une intégrale (pour les courbes) et une simple somme (pour les vecteurs). La solution est une équation qui additionne simplement les deux mondes :
+
+\begin{equation}
+\langle h_1, h_2 \rangle_{\mathbb{H}} = \underbrace{\langle f_1, f_2 \rangle_{\mathbb{F}}}_{\text{Monde continu (Intégrale)}} + \omega \underbrace{\langle v_1, v_2 \rangle}_{\text{Monde discret (Somme)}}
+\end{equation}
+
+\subsection{Le pondérateur $\omega$}
+L'intégration native de ces deux mondes pose un problème physique d'échelle. Imaginez que votre courbe représente des milliers de photons mesurés, et que votre vecteur contienne l'âge du patient (ex: 45 ans). Mathématiquement, la variance des milliers de photons va écraser l'âge dans les calculs.
+
+Le paramètre $\omega$ est là pour empêcher cela. Il agit comme un taux de change. Il est calculé empiriquement en faisant le ratio de la variance totale des courbes sur la variance totale des vecteurs :
+
+\begin{equation}
+\hat{\omega} = \frac{\sum_{i=1}^n ||Y_i - \bar{Y}||_{\mathbb{F}}^2}{\sum_{i=1}^n ||X_i - \bar{X}||_{\mathbb{R}^p}^2}
+\end{equation}
+
+Grâce à lui, la modélisation reste lucide : une modalité n'efface pas l'autre simplement à cause de son unité de mesure.
+
+\subsection*{Aparté de lecture : Le sens des notations ($\hat{\cdot}$ et $\tilde{\cdot}$)}
+Pour lire ce modèle sans ambiguïté, il faut prêter attention aux "accents" sur les variables. Ils indiquent le degré de réalité de ce que l'on calcule :
+\begin{itemize}
+    \item \textbf{Rien (ex. $\xi_m$)} : La vérité absolue. Inaccessible dans la vraie vie.
+    \item \textbf{Le Tilde (ex. $\tilde{\xi}_m$)} : L'erreur d'approximation. C'est ce qu'on perd parce qu'on décide de ne pas garder tous les axes pour simplifier le modèle.
+    \item \textbf{Le Chapeau (ex. $\hat{\xi}_m$)} : La réalité empirique (ce que l'ordinateur calcule). Cela inclut le bruit de notre échantillon limité dans la vraie vie.
+\end{itemize}
+
+
+\section{L'estimation matricielle : Comment la machine calcule vraiment}
+
+Le modèle de l'espace $\mathbb{H}$ est magnifique sur le papier, mais un ordinateur est incapable de diagonaliser une matrice de dimension infinie. Le théorème 4 de Jang permet de prouver qu'on peut contourner ce problème abstrait en utilisant des outils très pragmatiques.
+
+\subsection{Étape 1 : Compresser les deux mondes séparément}
+On commence par faire le ménage et extraire l'essentiel de chaque côté :
+\begin{enumerate}
+    \item \textbf{Côté courbes (FPCA)} : On lance une ACP fonctionnelle pour extraire les $L$ premiers scores $\hat{\eta}_{i}$.
+    \item \textbf{Côté vecteurs (ACP classique)} : On fait une ACP standard pour extraire les $J$ premiers scores $\hat{\gamma}_{i}$.
+\end{enumerate}
+
+\subsection{Étape 2 : Le super-vecteur de l'individu}
+Pour chaque patient, on regroupe ces résumés dans un "super-vecteur" d'état de taille $(L+J)$ :
+\begin{equation}
+\hat{x}_i = [\underbrace{\hat{\eta}_{i1}, \dots, \hat{\eta}_{iL}}_{\text{Résumés de la courbe}}, \underbrace{\hat{\gamma}_{i1}, \dots, \hat{\gamma}_{iJ}}_{\text{Résumés cliniques}}]^T
+\end{equation}
+
+\subsection{Étape 3 : La construction de la super-matrice $V$ et la révélation des couplages}
+Comment construit-on concrètement cette matrice $V$ ? L'ordinateur va prendre l'ensemble de nos super-vecteurs $\hat{x}_i$ (un par patient) et calculer leur matrice de variance-covariance. En termes simples, il regarde comment toutes ces coordonnées varient les unes par rapport aux autres à travers tous les patients. Formellement, il calcule $\hat{V} = \frac{1}{n-1} \sum_{i=1}^n \hat{x}_i \hat{x}_i^T$.
+
+Cette matrice géante est séparée en 4 blocs bien rangés :
+\begin{equation}
+V = \begin{bmatrix} V_y & V_{yx} \\ V_{xy} & V_x \end{bmatrix}
+\end{equation}
+
+Pour comprendre ce modèle, regardez la signification de ces blocs :
+\begin{itemize}
+    \item \textbf{Sur la diagonale ($V_y$ et $V_x$)} : Ce sont les variances internes aux courbes d'un côté, et internes aux vecteurs de l'autre.
+    \item \textbf{Hors de la diagonale ($V_{yx}$ et $V_{xy}$)} : C'est ici que se trouve l'intelligence systémique du modèle. Ces blocs mesurent \textit{l'interaction}. Concrètement, si la forme de la courbe rénale s'aplatit à chaque fois que le taux de créatinine augmente dans le sang du patient, l'ordinateur va inscrire un chiffre très élevé dans ces blocs. C'est la "mémoire" numérique du couplage.
+\end{itemize}
+
+\section{Optimisation : Trouver les axes fondamentaux}
+
+Maintenant que notre matrice $V$ contient toute l'information (y compris les couplages croisés), il faut en extraire le jus : les fameux "axes" de l'ACP.
+
+\subsection{Pourquoi et comment diagonaliser ?}
+L'objectif d'une ACP est de trouver un nouvel axe (une direction géométrique $e$) sur lequel nos données sont les plus étalées possibles. Cet étalement, c'est la variance. Imaginez votre nuage de points comme un ballon de rugby : chercher l'axe de plus grande variance, c'est chercher l'axe qui traverse le ballon dans sa plus grande longueur.
+
+Mathématiquement, si on projette nos données sur un axe $e$, la variance de cette projection se calcule par la formule $e^T V e$. Notre but est de maximiser ce chiffre, tout en gardant un axe de longueur 1 (pour ne pas tricher en allongeant l'axe à l'infini).
+
+
+
+C'est là qu'intervient la "diagonalisation". En algèbre linéaire, le théorème spectral nous donne une solution directe : les directions mathématiques qui maximisent cette formule $e^T V e$ sont \textbf{exactement les vecteurs propres} de notre matrice $V$.
+Diagonaliser la matrice, c'est simplement l'opération informatique qui permet de trouver ces "axes naturels" du nuage de points.
+
+\subsection{Pourquoi l'algorithme "voit" le phénomène global}
+Puisque la matrice $V$ contient les blocs de covariance croisée $V_{yx}$, l'algorithme est physiquement forcé de s'aligner sur ces couplages pour trouver l'axe le plus long. Il va donc nous sortir des axes qui décrivent le phénomène dans son ensemble : il capte la cause et la conséquence simultanément, car c'est là que se trouve la plus grande variabilité.
+
+\subsection{L'anatomie d'un vecteur propre $e_m$}
+Une fois la matrice diagonalisée, l'ordinateur nous sort un vecteur propre $\hat{e}_m$. Pensez à ce vecteur comme à une "recette de cuisine" pour fabriquer notre nouvel axe hybride.
+
+Puisque notre espace contient à la fois des informations de courbes et de scalaires, la recette $\hat{e}_m$ (qui est une longue colonne de chiffres) se coupe naturellement en deux parties :
+\begin{equation}
+\hat{e}_m = \begin{bmatrix} \hat{c}_m \\ \hat{d}_m \end{bmatrix}
+\end{equation}
+\begin{itemize}
+    \item \textbf{$\hat{c}_m$ (les doses pour la courbe)} : Ce bloc contient les pourcentages qu'il faudra appliquer à nos courbes. Il dit par exemple : "Pour cet axe, prenez 80\% de la forme de base n°1 et 20\% de la forme n°2".
+    \item \textbf{$\hat{d}_m$ (les doses pour les variables)} : Ce bloc contient les pondérations pour les variables cliniques. Il dit : "Cet axe est très influencé par l'âge (poids fort), mais très peu par le poids (poids faible)".
+\end{itemize}
+
+\section{La Reconstruction : Redescendre dans le réel}
+
+\subsection{Le problème d'un axe illisible}
+Le vecteur $\hat{e}_m$ que l'ordinateur vient de recracher est abstrait. Dire à un médecin "cet patient est situé sur l'axe composé à 40\% du score FPCA n°1 et à 60\% du score ACP n°2", c'est inexploitable. Il faut traduire ces mathématiques en réalités physiques observables.
+
+\subsection{Créer la "Légende" de l'axe ($\hat{\xi}_m$)}
+L'algorithme va utiliser les "doses" du vecteur propre abstrait pour reconstruire une image compréhensible :
+\begin{enumerate}
+    \item \textbf{La déformation temporelle ($\hat{\psi}_m(t)$)} : Il recombine les courbes de base pour nous dessiner \textit{concrètement} à quoi ressemble la courbe typique associée à cet axe.
+    \begin{equation}
+    \hat{\psi}_m(t) = \sum_{h=1}^L \hat{c}_{mh} \hat{\phi}_h(t)
+    \end{equation}
+    \item \textbf{Le profil clinique ($\hat{\theta}_m$)} : Il liste les variables cliniques les plus influentes sur cet axe.
+    \begin{equation}
+    \hat{\theta}_m = \sum_{j=1}^J \hat{d}_{mj} \hat{w}_j
+    \end{equation}
+\end{enumerate}
+
+Pour bien comprendre la mécanique de reconstruction ci-dessus, il est crucial de se rappeler ce que représentent les termes $\hat{\phi}_h(t)$ et $\hat{w}_j$ :
+\begin{itemize}
+    \item $\hat{\phi}_h(t)$ : Ce sont les axes de base fonctionnels (les courbes pures) que nous avions trouvés lors de la toute première étape avec l'ACP fonctionnelle (FPCA).
+    \item $\hat{w}_j$ : Ce sont les axes de base vectoriels trouvés lors de la première ACP classique.
+\end{itemize}
+
+
+\subsection{Créer la "Carte" des individus ($\hat{\rho}_{im}$)}
+Enfin, on attribue une note (un score) à chaque patient pour savoir où il se situe sur ce nouvel axe hybride :
+\begin{equation}
+\hat{\rho}_{im} = \sum_{h=1}^L \hat{\eta}_{ih} \hat{c}_{mh} + \sum_{j=1}^J \hat{\gamma}_{ij} \hat{d}_{mj}
+\end{equation}
 
 % ============================================================================
 \section{Le problème : mesurer la similarité entre objets mixtes}
@@ -663,6 +819,92 @@ sélection} $\alpha, \omega$ qui est le verrou.
 
 % ============================================================================
 \newpage
+\section{Données simulées : validation contrôlée (expérience~3)}
+\label{sec:exp3}
+% ============================================================================
+
+Les quatre jeux réels ci-dessus offrent une validation externe variée, mais
+sans contrôle fin du bruit ni du couplage fonctionnel / vectoriel. Comme
+indiqué dans les notes méthodologiques (section sur les stratégies A/B/C), le
+pipeline principal ne fait pas d'ACP sur le bloc $Z$ lorsque $p$ est faible et
+interprétable. Pour explorer une \textbf{piste complémentaire} lorsque la
+dimension vectorielle est plus riche, on dispose d'une étude sur le
+générateur \textbf{Cas2\_deriv} (courbes via une base trigonométrique avec
+échelle $\delta_1$ sur la forme de niveau, $\delta_2$ sur la dynamique ;
+vecteur $Z \in \R^p$ couplé au latent fonctionnel ; bruits $\sigma^2$ et
+$\tau^2$). Ici $p = 20$ et $n = 300$ individus répartis en $K = 3$ classes
+équilibrées.
+
+Quatre scénarios notés S1--S4 fixent
+$\Delta = (\delta_1, \delta_2, \delta_3)$ : S1 $(1,1,1)$ signal fort ;
+S2 $(1,1,0.5)$ affaiblissement vectoriel ; S3 $(0.5,0.5,1)$ affaiblissement
+fonctionnel ; S4 $(0.5,0.5,0.5)$ affaiblissement global. Pour chaque
+scénario, $50$ graines indépendantes sont tirées ; le pipeline lissage --
+FPCA -- distances -- clustering est exécuté comme pour les données réelles,
+puis des variantes additionnelles sont comparées : baselines sur $D_0$,
+$D_1$, $D_s$, $\Dp(\alpha)$ avec $\alpha$ choisi par \textbf{silhouette}
+($\mathrm{Df}_{\mathrm{sil}}$), stratégies A, B et C, et enfin une chaîne
+\textbf{HFV tronquée} (ACP sur $Z$ standardisé puis fusion avec les scores
+FPCA, reconstruction, noyaux ; notée \emph{DK reconstruit} dans le code).
+
+\begin{keybox}[Protocole d'évaluation]
+Sur ce benchmark simulé, les hyperparamètres des grilles ($\alpha$,
+$(\alpha,\omega)$ pour B, etc.) sont choisis par \textbf{silhouette},
+comme pour les résultats du tableau~\ref{tab:resultats}. L'\textbf{ARI}
+sert uniquement à mesurer l'accord avec les classes simulées — il n'est
+\textbf{pas} utilisé pour sélectionner les paramètres.
+\end{keybox}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{lcc}
+  \toprule
+  \textbf{Méthode} & \textbf{ARI moyen (global)} & \textbf{Sil.\ moyen} \\
+  \midrule
+  C ($\DK$, stratégie historique) & 0.651 & 0.126 \\
+  $D_1$ (forme seule)               & 0.626 & 0.257 \\
+  DK reconstruit (HFV + noyaux)    & 0.608 & 0.118 \\
+  A (FPCA + $Z$)                   & 0.561 & 0.134 \\
+  B ($\Dw$, sil.)                  & 0.555 & 0.287 \\
+  $\mathrm{Df}_{\mathrm{sil}}$     & 0.555 & 0.287 \\
+  $D_0$                            & 0.528 & 0.256 \\
+  $D_s$                            & 0.414 & 0.116 \\
+  \bottomrule
+\end{tabular}
+\caption{Expérience~3 : moyennes sur les $4 \times 50$ runs (tous scénarios,
+toutes graines). Les valeurs proviennent du benchmark \texttt{benchmark\_all\_methods\_simulated.R} du dépôt.}
+\label{tab:sim_global}
+\end{table}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\small
+\begin{tabular}{lp{7.2cm}}
+  \toprule
+  \textbf{Scénario} & \textbf{Trois meilleures méthodes (ARI moyen)} \\
+  \midrule
+  S1 & C ($0.94$) $>$ DK reconstruit ($0.90$) $>$ B / $D_1$ / $\mathrm{Df}_{\mathrm{sil}}$ ($0.87$) \\
+  S2 & C ($0.89$) $>$ B / $D_1$ / $\mathrm{Df}_{\mathrm{sil}}$ ($0.87$) $>$ $D_0$ ($0.83$) \\
+  S3 & A ($0.62$) $>$ $D_s$ ($0.51$) $>$ C ($0.46$) \\
+  S4 & $D_1$ ($0.38$) $>$ C ($0.32$) $>$ A ($0.32$) \\
+  \bottomrule
+\end{tabular}
+\caption{Classement par scénario (ARI moyen sur $50$ graines ; arrondis).}
+\label{tab:sim_ranking}
+\end{table}
+
+Sur S1--S2, la stratégie C et la chaîne DK reconstruit exploitent fortement
+le signal fonctionnel ; lorsque celui-ci est réduit (S3--S4), toutes les
+méthodes se dégradent et les écarts se resserrent — ce qui est cohérent avec
+le rôle central des dérivées observé sur données réelles. Les détails de
+reproductibilité et les sorties complètes (CSV) sont décrits dans le dépôt
+(\texttt{experiments/03\_simulated\_hybride/}, fichier
+\texttt{RAPPORT\_DETAILLE\_EXPERIENCE\_03.md}).
+
+% ============================================================================
+\newpage
 \section{Le paradoxe de la silhouette}
 % ============================================================================
 
@@ -734,7 +976,7 @@ pistes de recherche envisagées.
   $D_0 + D_1 \to D_p$ \newline
   (2 distances fonctionnelles) &
   $D_0 + D_1 \to D_p(\alpha)$ \newline
-  (idem, \textbf{bug $D_1$ corrigé}) \\[6pt]
+  (idem) \\[6pt]
 
   \textcolor{vect}{\ding{55}} Variables $Z$ jamais utilisées &
   \textcolor{mix}{\ding{51}} $Z$ intégré dans $\Dw$ et $\DK$ \\[4pt]
@@ -750,8 +992,6 @@ pistes de recherche envisagées.
   PAM (correct pour le clustering \newline
   à partir de matrices de distance) \\[4pt]
 
-  1 dataset (SHOM, non labellisé) &
-  4 datasets labellisés + pipeline générique \\
   \bottomrule
 \end{tabular}
 \caption{Comparaison des contributions.}
@@ -759,9 +999,7 @@ pistes de recherche envisagées.
 
 \begin{resultbox}[Découverte principale]
 Les dérivées ($D_1$) sont \textbf{systématiquement informatives} :
-$\alpha_{\text{optimal}} \in [0.6,\, 1.0]$ sur les~4 datasets. Hugo ne
-pouvait pas observer ce pattern car il n'avait pas mis en place de
-recherche systématique sur $\alpha$.
+$\alpha_{\text{optimal}} \in [0.6,\, 1.0]$ sur les~4 datasets.
 \end{resultbox}
 
 % ============================================================================
@@ -783,54 +1021,41 @@ Ces problèmes sont couplés car le meilleur $(\alpha, \omega)$ dépend de $k$,
 et inversement. Voici les pistes de recherche envisagées.
 
 % ────────────────────────────────────────────────────────────────────────
-\subsection{Sélection par stabilité du clustering}
+\subsection{Sélection de $k$ par instabilité bootstrap (Fang \& Wang, 2012)}
 
-La piste la plus prometteuse repose sur une idée simple : le bon triplet
-$(k, \alpha, \omega)$ est celui qui produit des clusters
-\textbf{reproductibles} lorsqu'on perturbe les données.
+Une piste documentée repose sur la minimisation d'une \textbf{instabilité}
+mesurée par bootstrap \cite{fang2012} : pour un couple $(\alpha,\omega)$ fixé,
+on compare des partitions obtenues sur des rééchantillonnages ; le $k$ qui
+minimise l'instabilité moyenne est retenu. L'implémentation utilisée dans le
+projet est \texttt{fpc::nselectboot} (expérience~01,
+\texttt{experiments/01\_stabilite/}).
 
-\paragraph{Protocole.}
-Pour chaque triplet $(k, \alpha, \omega)$ dans la grille :
-\begin{enumerate}[nosep]
-  \item Calculer la partition $\mathcal{C}$ sur les $n$ individus complets
-    (PAM avec la distance $\Dw(\alpha, \omega)$).
-  \item Répéter $B$ fois ($B \approx 50$) :
-    \begin{enumerate}[nosep]
-      \item Sous-échantillonner $80\%$ des individus aléatoirement.
-      \item Recalculer la distance et la partition $\mathcal{C}_b^*$ sur ce
-        sous-échantillon.
-      \item Mesurer l'ARI entre $\mathcal{C}$ (restreinte aux individus
-        présents) et $\mathcal{C}_b^*$.
-    \end{enumerate}
-  \item La \textbf{stabilité} du triplet =
-    $\text{Stab}(k, \alpha, \omega) = \frac{1}{B}\sum_{b=1}^{B}
-    \text{ARI}(\mathcal{C}, \mathcal{C}_b^*)$.
-\end{enumerate}
-Le triplet $(k^*, \alpha^*, \omega^*)$ avec la stabilité maximale est retenu.
+\paragraph{Protocole (esprit).}
+Pour chaque $(\alpha,\omega)$ de la grille, on construit $\Dw(\alpha,\omega)$,
+puis on estime une instabilité pour chaque $k$ candidat via des paires
+d'échantillons bootstrap ; on retient $k^*(\alpha,\omega)$ minimiseur. En
+explorant une grille complète en $(\alpha,\omega)$, on obtient une carte
+$k^*(\alpha,\omega)$ et des heatmaps d'instabilité.
 
-\paragraph{Pourquoi la stabilité ?}
+\paragraph{Intérêt.}
 \begin{itemize}[nosep]
-  \item Pas de biais vers des formes géométriques particulières
-    (contrairement à la silhouette).
-  \item Fonctionne aussi pour sélectionner $k$ : un $k$ trop grand ou trop
-    petit produit des clusters instables.
-  \item Ne nécessite \textbf{aucun label} — l'ARI est calculé entre deux
-    partitions produites par la méthode elle-même.
-  \item Mesure une propriété \textbf{intrinsèquement désirable} : la
-    reproductibilité.
+  \item Méthode publiée et reproductible (référence bibliographique claire).
+  \item Ne nécessite \textbf{pas de labels} pour choisir $k$ à $(\alpha,\omega)$
+    fixé.
+  \item Complémentaire d'autres critères (silhouette, gap, vote) évoqués
+    ci-dessous.
 \end{itemize}
 
 \paragraph{Coût calculatoire.}
-Pour une grille $(\alpha, \omega) \in \{0, 0.1, \ldots, 1\}^2$,
-$k \in \{2, \ldots, 6\}$, et $B = 50$ : cela représente
-$11 \times 11 \times 5 \times 50 = 30\,250$ exécutions de PAM. C'est
-un coût important mais tout à fait faisable (PAM sur $n < 300$ est rapide).
+Pour une grille fine (ex.\ $21\times 21$), plusieurs valeurs de $k$ et $B$
+grand (ex.\ $150$), le coût est élevé mais parallélisable en principe ; voir
+les scripts de l'expérience~01 pour le détail.
 
 % ────────────────────────────────────────────────────────────────────────
 \subsection{Vote entre critères de validation}
 
 Plutôt que de s'appuyer sur un unique critère (silhouette, gap, ou
-stabilité), on peut faire \textbf{voter} plusieurs critères pour élire le
+instabilité bootstrap), on peut faire \textbf{voter} plusieurs critères pour élire le
 meilleur $(k, \alpha, \omega)$.
 
 \paragraph{Principe.}
@@ -842,7 +1067,7 @@ de validation interne :
     par rapport à une référence uniforme.
   \item \textbf{Prediction strength} \cite{tibshirani2005} :
     reproductibilité par validation croisée.
-  \item \textbf{Stabilité} (bootstrap, cf.\ section précédente).
+  \item \textbf{Instabilité bootstrap} (Fang \& Wang, cf.\ section précédente).
   \item \textbf{Indice de Calinski-Harabasz} \cite{calinski1974} : rapport variance
     inter/intra.
   \item \textbf{Indice de Davies-Bouldin} \cite{davies1979} : ratio de dispersion intra par
@@ -926,10 +1151,16 @@ vecteur). C'est l'idée des approches de type \textbf{HFV-PCA}
 Dans ce cadre, les composantes principales seraient définies comme les
 vecteurs propres d'un opérateur de covariance sur
 $\mathcal{H}_f \times \R^p$, produisant un jeu unique de scores
-hybrides pour chaque individu. Ce chantier méthodologique dépasse le
-cadre de ce rapport, centré sur l'architecture de distances et les
-critères de sélection pour le clustering, mais il constitue une piste
-prioritaire pour des travaux ultérieurs.
+hybrides pour chaque individu. Ce formalisme opérateur n'a pas été
+entièrement mis en \oe uvre ici : le rapport reste centré sur l'architecture
+de distances et les critères de sélection pour le clustering sur données
+réelles. En revanche, une \textbf{implémentation exploratoire} de type
+HFV tronquée (FPCA, puis ACP sur $Z$ standardisé, fusion des blocs,
+reconstruction, puis noyaux — étapes \texttt{02b}--\texttt{03b} du code)
+a été testée sur le benchmark simulé de la section~\ref{sec:exp3}, avec
+$p = 20$. Elle ne remplace pas la théorie complète sur
+$\mathcal{H}_f \times \R^p$, mais en donne un contrepoint numérique
+complémentaire aux stratégies A/B/C.
 
 % ────────────────────────────────────────────────────────────────────────
 \subsection{Application aux données non labellisées}
@@ -939,7 +1170,7 @@ réelles non labellisées (par exemple, les profils de célérité du son du
 SHOM). L'enjeu est triple : (1)~déterminer automatiquement le nombre de
 clusters~$k$, (2)~sélectionner $(\alpha, \omega)$ sans vérité terrain, et
 (3)~valider la pertinence des clusters obtenus par expertise métier.
-Les pistes de recherche présentées ci-dessus (stabilité, vote entre
+Les pistes de recherche présentées ci-dessus (instabilité bootstrap, vote entre
 critères, optimisation bayésienne, méta-calibration) visent précisément
 à résoudre ce verrou.
 
@@ -965,6 +1196,11 @@ critères, optimisation bayésienne, méta-calibration) visent précisément
   D.L.~Davies et D.W.~Bouldin,
   \textit{A cluster separation measure},
   IEEE Transactions on Pattern Analysis and Machine Intelligence, 1(2):224--227, 1979.
+
+\bibitem{fang2012}
+  Y.~Fang et J.~Wang,
+  \textit{Selection of the number of clusters via the bootstrap method},
+  Computational Statistics and Data Analysis, 56(3):468--477, 2012.
 
 \end{thebibliography}
 

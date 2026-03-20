@@ -1,12 +1,17 @@
+.pad_vec <- function(v, p) {
+  if (length(v) >= p) v[seq_len(p)] else c(v, rep(0, p - length(v)))
+}
+
 Cas2_deriv <- function(nc = c(100, 100, 100),
                        len_t = 60,
                        delta = c(1, 1, 1),
+                       p_z = 10L,
                        coef_mu_base = list(
-                         # Classe 1 
+                         # Classe 1
                          c(  1.0, -0.8, -1.2,  0.3, rep(0, 6)),
-                         # Classe 2 
+                         # Classe 2
                          c( -1.0,  0.8,  1.2, -0.3, rep(0, 6)),
-                         # Classe 3 
+                         # Classe 3
                          c(  0.0,  0.0,  0.0,  1.2, rep(0, 6))
                        ),
                        lambda_list_10 = list(
@@ -19,14 +24,21 @@ Cas2_deriv <- function(nc = c(100, 100, 100),
                          c( 0.8,  0.0,  0.6,  0.4, rep(0, 6)),  # classe 2
                          c( 0.0,  0.0,  0.0, -0.4, rep(0, 6))   # classe 3
                        ),
-                       muY_base  =  list(
-                         rep(0.8, 10),
-                         rep(-0.8, 10),
-                         rep(0.0, 10)
-                       ),
-                       sigma2 = 0.2,   
-                       tau2   = 0.2) {  
-  
+                       muY_base = NULL,
+                       sigma2 = 0.2,
+                       tau2   = 0.2) {
+
+  p_z <- as.integer(p_z)
+  stopifnot(p_z >= 2L, is.finite(p_z))
+
+  if (is.null(muY_base)) {
+    muY_base <- list(
+      .pad_vec(rep(0.8, 10), p_z),
+      .pad_vec(rep(-0.8, 10), p_z),
+      .pad_vec(rep(0.0, 10), p_z)
+    )
+  }
+
   stopifnot(length(nc) == 3,
             length(lambda_list_10) == 3,
             length(coef_mu_base) == 3,
@@ -38,7 +50,8 @@ Cas2_deriv <- function(nc = c(100, 100, 100),
   stopifnot(all(vapply(lambda_list_10, length, integer(1)) == D))
   stopifnot(all(vapply(coef_mu_base,   length, integer(1)) == D))
   stopifnot(all(vapply(m_rho_base,     length, integer(1)) == D))
-  
+  stopifnot(all(vapply(muY_base,     length, integer(1)) == p_z))
+
   t_grid <- seq(0, 1, length.out = len_t)
   
   Psi <- matrix(NA, nrow = len_t, ncol = D)
@@ -88,9 +101,9 @@ Cas2_deriv <- function(nc = c(100, 100, 100),
   Rho    <- do.call(rbind, lapply(sim_list, `[[`, "Rho"))
   class  <- rep(1:3, times = nc)
   
-  p <- 10
+  p <- p_z
   R <- matrix(0.2, nrow = p, ncol = p); diag(R) <- 1
-  Theta <- eigen(R, symmetric = TRUE)$vectors[, 1:10, drop = FALSE]
+  Theta <- eigen(R, symmetric = TRUE)$vectors[, 1:D, drop = FALSE]
   
   muY_list <- lapply(muY_base, function(m) delta[3] * m)
   
@@ -116,7 +129,8 @@ Cas2_deriv <- function(nc = c(100, 100, 100),
     tau2        = tau2,
     delta       = delta,
     idx_curve   = idx_curve,
-    idx_deriv   = idx_deriv
+    idx_deriv   = idx_deriv,
+    p_z         = p_z
   ))
 }
 

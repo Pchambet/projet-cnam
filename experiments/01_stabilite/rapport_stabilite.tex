@@ -1,8 +1,6 @@
 % ============================================================================
-% Expérience 01 — Choix des paramètres de clustering
-% Rapport complet : stabilité, nselectboot, comparaison
-% ============================================================================
-% Ton étudiant, simple et clair. Compilation : make (depuis ce dossier)
+% Expérience 01 — Instabilité bootstrap (Fang & Wang, 2012) / nselectboot
+% Compilation : make (depuis ce dossier)
 % ============================================================================
 
 \documentclass[11pt, a4paper]{article}
@@ -18,7 +16,7 @@
 \usepackage{hyperref}
 \hypersetup{colorlinks=true, linkcolor=blue}
 
-\title{Expérience 01 — Comment choisir le nombre de clusters et les paramètres ?}
+\title{Expérience 01 --- Instabilité bootstrap et choix de $k$ (Fang \& Wang)}
 \author{Pierre Chambet}
 \date{Mars 2026}
 
@@ -26,188 +24,143 @@
 \maketitle
 
 \begin{abstract}
-On a trois paramètres à choisir : $k$ (nombre de groupes), $\alpha$ et $\omega$
-(qui règlent la distance). On compare deux méthodes : la stabilité (notre
-protocole) et nselectboot (méthode de la littérature). La stabilité choisit
-toujours $k=2$, ce qui pose problème. nselectboot donne des résultats plus
-variés et récupère $k=4$ sur Canadian et AEMET, et $k=3$ sur Tecator.
+On veut choisir $k$ (nombre de clusters) et les paramètres de distance
+$(\alpha,\omega)$ sans labels. Ce rapport se concentre sur une méthode de la
+littérature : \textbf{nselectboot} (Fang \& Wang, 2012), implémentée dans R
+(\texttt{fpc::nselectboot}), qui minimise une \textbf{instabilité} mesurée par
+bootstrap. Un ancien protocole de « stabilité » ad hoc (sans article de référence)
+a été retiré pour clarifier le message. On teste une grille 21×21 en
+$(\alpha,\omega)$ sur quatre jeux de données ; les labels ne servent qu'à
+évaluer l'ARI une fois $k$ choisi.
 \end{abstract}
 
 \tableofcontents
 \newpage
 
 % ============================================================================
+\section{Objectif de l'expérience 1}
+% ============================================================================
+
+On veut choisir trois quantités \textbf{sans utiliser les labels pour le choix} :
+
+\begin{itemize}
+  \item \textbf{$k$} : nombre de clusters.
+  \item \textbf{$\alpha$} : pondération entre distance sur les courbes (niveau)
+    et sur les dérivées (forme).
+  \item \textbf{$\omega$} : pondération entre partie fonctionnelle et partie
+    vectorielle ($Z$).
+\end{itemize}
+
+La méthode retenue est \textbf{nselectboot} : pour chaque couple $(\alpha,\omega)$
+de la grille, on estime un $k_\text{opt}$ qui minimise l'instabilité bootstrap.
+On obtient une carte $(\alpha,\omega) \mapsto k_\text{opt}$ et des heatmaps
+d'instabilité par $k$.
+
+\paragraph{Pourquoi une grille en $(\alpha,\omega)$ ?}
+Parce que $\alpha$ et $\omega$ changent la matrice de distances $D_w(\alpha,\omega)$
+et donc le clustering. Les heatmaps montrent l'instabilité par $(\alpha,\omega)$
+et $k$ : \textbf{bleu = faible instabilité (bon)}, \textbf{rouge = forte (mauvais)}.
+
+% ============================================================================
 \section{Le problème en une phrase}
 % ============================================================================
 
-Pour faire du clustering, il faut choisir : combien de groupes ($k$) ? Et
-quels paramètres pour la distance ($\alpha$, $\omega$) ? On n'a pas de labels
-pour vérifier. Il faut donc des critères qui marchent sans vérité terrain.
+Pour du clustering, il faut fixer $k$ et la distance. Sans vérité terrain pour
+choisir, on utilise un critère documenté (instabilité bootstrap).
 
 % ============================================================================
-\section{Les trois paramètres à choisir}
+\section{Les trois paramètres et les données}
 % ============================================================================
 
 \begin{itemize}
-  \item \textbf{$k$} : nombre de clusters. Exemple : 2 groupes, 3 groupes, etc.
-  \item \textbf{$\alpha$} : mélange entre distance sur les courbes (niveau) et
-    sur les dérivées (forme). 0 = niveau seul, 1 = forme seule.
-  \item \textbf{$\omega$} : mélange entre partie fonctionnelle (courbes) et
-    partie vectorielle (latitude, altitude, etc.). 0 = vectoriel seul, 1 =
-    fonctionnel seul.
+  \item \textbf{$k$} : nombre de clusters testé dans $\{2,\ldots,6\}$.
+  \item \textbf{$\alpha$} : mélange $D_0$ (courbes) / $D_1$ (dérivées).
+  \item \textbf{$\omega$} : mélange distance fonctionnelle / distance sur $Z$.
 \end{itemize}
 
-On teste une grille : $k$ de 2 à 6, $\alpha$ et $\omega$ de 0 à 1. On a 4
-jeux de données avec des labels (pour évaluer) : Canadian (35 stations, 4
-régions), AEMET (73 stations, 4 zones), Growth (93 enfants, 2 sexes), Tecator
-(215 échantillons, 3 niveaux de gras).
+Quatre jeux de données (labels uniquement pour \textbf{évaluer} après coup) :
+Canadian, AEMET, Growth, Tecator. Les $k_{\mathrm{vrai}}$ utilisés dans les
+tableaux viennent des scripts \texttt{src/00\_preprocess*.R} : Canadian
+(\texttt{CanadianWeather\$region}), Growth (garçons/filles), AEMET et Tecator
+via des règles définies dans le projet (géographie / seuils sur la matière grasse)
+--- ce ne sont pas des vérités « absolues », mais des références pour comparer les
+partitions.
 
 % ============================================================================
-\section{Méthode 1 : La stabilité (notre protocole)}
+\section{nselectboot (Fang \& Wang, 2012)}
 % ============================================================================
 
-\subsection{L'idée}
+\subsection{Idée}
 
-Un bon choix de paramètres donne des groupes \textbf{reproductibles} : si on
-enlève quelques individus au hasard et qu'on reclustère, on doit retrouver
-à peu près les mêmes groupes.
+On \textbf{minimise l'instabilité} : à chaque répétition bootstrap, on mesure à quel
+point deux partitions (obtenues sur deux échantillons bootstrap) se contredisent.
+Le $k$ qui minimise cette instabilité moyenne est retenu pour le couple
+$(\alpha,\omega)$ fixé.
 
-\subsection{Comment on fait}
+\subsection{PAM}
 
-Pour chaque triplet $(k, \alpha, \omega)$ :
+\textbf{PAM} (k-medoids) travaille sur une matrice de distances ; les centres sont
+des \textbf{médoïdes} (individus réels), ce qui limite l'influence des outliers
+par rapport à des moyennes (k-means).
+
+\subsection{Protocole (résumé)}
+
+Pour chaque $(\alpha,\omega)$ de la grille (21×21, pas 0.05), avec $B=150$ :
+
 \begin{enumerate}
-  \item On fait PAM sur tous les $n$ individus $\to$ partition $\mathcal{C}$.
-  \item On répète 150 fois : on garde 80\,\% des individus au hasard, on
-    reclustère dessus $\to$ partition $\mathcal{C}_b^*$. On compare
-    $\mathcal{C}$ et $\mathcal{C}_b^*$ avec l'ARI (accord entre les deux).
-  \item Stabilité = moyenne des 150 ARI.
+  \item Construire $D_w(\alpha,\omega)$ (même pipeline que le reste du projet :
+    lissage, FPCA, distances).
+  \item Pour chaque $k \in \{2,\ldots,6\}$, \texttt{fpc::nselectboot} tire deux
+    échantillons bootstrap d'indices, clusterise avec PAM sur les sous-matrices,
+    complète les partitions sur tous les individus (classification croisée), puis
+    agrège une mesure d'instabilité (voir code du package).
+  \item $k_\text{opt} = \arg\min_k \widehat{\text{instabilité}}(k)$.
 \end{enumerate}
-On garde le triplet avec la stabilité la plus haute.
 
-\subsection{PAM et ARI en bref}
+Les fichiers \texttt{nselectboot\_*.csv} et les figures
+\texttt{nselectboot\_heatmap\_*.png} synthétisent les résultats.
 
-\textbf{PAM} : comme k-means, mais les centres sont de vrais individus
-(médoïdes). Ça marche avec n'importe quelle distance.
+\subsection{Résumé sur la grille}
 
-\textbf{ARI} : mesure l'accord entre deux partitions. Entre $-1$ et $1$. ARI =
-1 = tout pareil. On compare toujours sur les mêmes individus (les 80\,\% gardés).
-
-\subsection{Résultat}
-
-La stabilité choisit \textbf{toujours} $k=2$, quel que soit le dataset. Sur
-Canadian et AEMET, il y a pourtant 4 classes. On perd de l'information.
+En regardant la médiane des $k_\text{opt}$ sur les 441 couples : Canadian
+$\to 4$, AEMET $\to 4$, Growth $\to 2$, Tecator $\to 3$, cohérent avec les
+$k_{\mathrm{vrai}}$ retenus pour l'évaluation (sauf conventions sur AEMET/Tecator).
 
 % ============================================================================
-\section{Méthode 2 : nselectboot (Fang \& Wang, 2012)}
+\section{Résultats : triplets retenus pour l'évaluation (nselectboot)}
 % ============================================================================
 
-\subsection{L'idée}
-
-Cette méthode \textbf{minimise l'instabilité} au lieu de maximiser la
-stabilité. L'instabilité mesure : à quel point les clusters changent quand on
-refait un tirage bootstrap. Moins ça change, mieux c'est.
-
-\subsection{Comment on fait}
-
-On teste plusieurs couples $(\alpha, \omega)$. Pour chaque couple, on tire des
-paires d'échantillons bootstrap, on clustère chacun, on mesure le désaccord.
-Le $k$ qui minimise ce désaccord est retenu. Implémentation : fonction
-\texttt{nselectboot} du package R \texttt{fpc}.
-
-\subsection{Résultat}
-
-Le $k$ optimal \textbf{change} selon $(\alpha, \omega)$. Sur une grille 21×21
-(441 couples), on obtient des $k$ différents selon les zones. En prenant la
-médiane sur la grille : Canadian $\to$ 4, AEMET $\to$ 4, Growth $\to$ 2,
-Tecator $\to$ 3. Pour Canadian, AEMET et Tecator, c'est le bon $k$.
-
-% ============================================================================
-\section{Comparaison des deux méthodes}
-% ============================================================================
+Pour les matrices de confusion, on prend le premier couple $(\alpha,\omega)$ de
+la grille tel que $k_\text{opt} = k_{\mathrm{vrai}}$ (sinon le plus proche), comme
+dans \texttt{generate\_confusion\_nselectboot.R}.
 
 \begin{table}[H]
 \centering
 \renewcommand{\arraystretch}{1.3}
 \small
-\begin{tabular}{lcccccc}
+\begin{tabular}{lcccc}
 \toprule
-\textbf{Dataset} & $k_{\mathrm{vrai}}$ & \multicolumn{2}{c}{\textbf{Stabilité}} & \multicolumn{2}{c}{\textbf{nselectboot}} & \\
-& & $k$, $(\alpha,\omega)$ & ARI & $k$, $(\alpha,\omega)$ & ARI & \\
+\textbf{Dataset} & $k_{\mathrm{vrai}}$ & $k$ & $(\alpha,\omega)$ & ARI \\
 \midrule
-Canadian & 4 & 2, (0.30, 0) & 0.54 & 4, (0.25, 0.15) & 0.62 \\
-AEMET    & 4 & 2, (0, 1) & 0.27 & 4, (0.35, 0.20) & 0.39 \\
-Growth   & 2 & 2, (1, 0.45) & 0.72 & 2, (0.10, 0.05) & 0.42 \\
-Tecator  & 3 & 2, (0.40, 0.30) & 0.47 & 3, (0.75, 0.10) & 0.58 \\
+Canadian & 4 & 4 & (0.25,\,0.15) & 0.62 \\
+AEMET    & 4 & 4 & (0.35,\,0.20) & 0.39 \\
+Growth   & 2 & 2 & (0.10,\,0.05) & 0.42 \\
+Tecator  & 3 & 3 & (0.75,\,0.10) & 0.58 \\
 \bottomrule
 \end{tabular}
-\caption{Comparaison : chaque méthode choisit un triplet différent. L'ARI est
-calculé sur la partition obtenue avec ce triplet.}
-\label{tab:comparaison}
+\caption{Partition évaluée avec les labels (ARI).}
+\label{tab:nselectboot}
 \end{table}
 
-\subsection{Ce qu'on observe}
-
-\begin{itemize}
-  \item \textbf{Growth} : les deux méthodes trouvent $k=2$. C'est correct.
-    ARI = 0.72, bon résultat.
-  \item \textbf{Canadian et AEMET} : la stabilité dit $k=2$, nselectboot dit
-    $k=4$ (médiane sur la grille). Le vrai $k$ est 4. nselectboot fait mieux ici.
-  \item \textbf{Tecator} : la stabilité dit $k=2$, nselectboot trouve $k=3$
-    (le vrai $k$). Avec la grille fine, nselectboot récupère les 3 classes.
-\end{itemize}
-
 % ============================================================================
-\section{Pourquoi la stabilité favorise $k=2$ ?}
+\section{Matrices de confusion (nselectboot)}
 % ============================================================================
 
-Avec $k=2$, on a deux groupes. Deux partitions à deux groupes ont peu de
-façons de diverger : soit on est d'accord, soit on sépare différemment. Avec
-$k=4$, quatre groupes peuvent se réarranger de plein de façons. Donc l'ARI
-entre la partition complète et celle du sous-échantillon est plus bas en
-moyenne. La stabilité favorise mécaniquement les petits $k$.
+Lignes = vraies classes. Colonnes = clusters prédits.
 
-% ============================================================================
-\section{Heatmaps et matrices de confusion : deux protocoles, deux résultats}
-% ============================================================================
-
-\textbf{Important} : les heatmaps et les matrices de confusion \textbf{dépendent
-du protocole}. Ce n'est pas la même chose.
-
-\begin{itemize}
-  \item \textbf{Heatmaps stabilité} : montrent la stabilité (moyenne ARI) pour
-    chaque $(\alpha, \omega)$ et chaque $k$. Données : \texttt{stabilite\_*.csv}.
-  \item \textbf{Heatmaps nselectboot} : montrent l'instabilité pour chaque
-    $(\alpha, \omega)$ et chaque $k$. Bleu = instabilité faible (bon), rouge =
-    forte (mauvais). Données : \texttt{nselectboot\_*.csv}.
-  \item \textbf{Matrices de confusion} : une par méthode, car chaque méthode
-    choisit un triplet $(k, \alpha, \omega)$ différent $\to$ partition différente.
-\end{itemize}
-
-% ----------------------------------------------------------------------------
-\subsection{Matrices de confusion : comparaison côte à côte}
-% ----------------------------------------------------------------------------
-
-Lignes = vraies classes. Colonnes = clusters trouvés.
-
-\paragraph{Canadian.} Stabilité : $k=2$, 4 régions en 2 clusters. nselectboot :
-$k=4$, les 4 régions sont séparées. ARI passe de 0.54 à 0.62.
-
+\paragraph{Canadian} ($k=4$, ARI 0.62)
 \begin{center}
 \small
-\begin{tabular}{@{}p{4.8cm}p{5.8cm}@{}}
-\textbf{Stabilité} ($k=2$, ARI 0.54) &
-\textbf{nselectboot} ($k=4$, ARI 0.62) \\[0.5em]
-\begin{tabular}{lrr}
-\toprule
-& C1 & C2 \\
-\midrule
-Arctic & 0 & 3 \\
-Atlantic & 15 & 0 \\
-Continental & 1 & 11 \\
-Pacific & 1 & 4 \\
-\bottomrule
-\end{tabular}
-&
 \begin{tabular}{lrrrr}
 \toprule
 & C1 & C2 & C3 & C4 \\
@@ -218,132 +171,103 @@ Continental & 1 & 6 & 5 & 0 \\
 Pacific & 0 & 4 & 0 & 1 \\
 \bottomrule
 \end{tabular}
+\end{center}
+
+\paragraph{AEMET} ($k=4$, ARI 0.39)
+\begin{center}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+& C1 & C2 & C3 & C4 \\
+\midrule
+Atlantique & 9 & 4 & 0 & 0 \\
+Continental & 2 & 19 & 0 & 0 \\
+Mediterranee & 0 & 3 & 15 & 0 \\
+Sud & 0 & 3 & 10 & 8 \\
+\bottomrule
 \end{tabular}
 \end{center}
 
-\paragraph{AEMET.} Stabilité : $k=2$, ARI 0.27. nselectboot : $k=4$, ARI 0.39.
-Les 4 zones sont mieux séparées avec nselectboot.
-
-\paragraph{Growth.} Les deux ont $k=2$. Stabilité : ARI 0.72 (meilleur $(\alpha,
-\omega)$). nselectboot : ARI 0.42. Ici la stabilité fait mieux car elle a choisi
-un meilleur couple $(\alpha, \omega)$.
-
-\paragraph{Tecator.} Stabilité : $k=2$, ARI 0.47. nselectboot : $k=3$ (le vrai
-$k$), ARI 0.58. Avec la grille fine, nselectboot récupère les 3 classes.
-
-% ============================================================================
-\section{Sensibilité au nombre de répétitions $B$}
-% ============================================================================
-
-On a testé $B$ = 50, 55, 70, 150. Le triplet optimal change un peu selon $B$,
-surtout pour Canadian. Avec $B=150$ et la grille fine, on converge vers $k=2$
-partout. Augmenter $B$ ne corrige pas le biais vers $k=2$.
-
-% ============================================================================
-\section{Autres méthodes de la littérature}
-% ============================================================================
-
-\begin{itemize}
-  \item \textbf{Clest} (Dudoit \& Fridlyand, 2002) : split train/test, on
-    clustère le train, on prédit sur le test. On compare à des données sans
-    structure ($H_0$). Sans cette calibration, notre prototype donne aussi
-    $k=2$.
-  \item \textbf{Wang (2010)} : validation croisée pour estimer l'instabilité.
-    Même idée que Fang-Wang, avec une autre façon de tirer les échantillons.
-\end{itemize}
-
-Références en fin de rapport.
-
-% ============================================================================
-\section{Pistes pour la suite}
-% ============================================================================
-
-\begin{enumerate}
-  \item \textbf{Coupler les méthodes} : utiliser la stabilité pour $(\alpha,
-    \omega)$ et nselectboot pour $k$.
-  \item \textbf{Vote} : faire voter plusieurs critères (stabilité,
-    nselectboot, silhouette, gap) et prendre le choix majoritaire.
-  \item \textbf{Calibration $H_0$ pour Clest} : implémenter la partie
-    « données sans structure » pour voir si Clest fait mieux.
-\end{enumerate}
-
-% ============================================================================
-\section{Heatmaps : stabilité vs nselectboot}
-% ============================================================================
-
-Deux types de heatmaps, car les deux protocoles produisent des grilles
-différentes.
-
-\subsection{Stabilité (notre protocole)}
-Pour chaque $k$, la stabilité (moyenne ARI) en fonction de $(\alpha, \omega)$.
-Rouge = haut = bon. $\times$ = meilleur $(\alpha, \omega)$ pour ce $k$.
-
-\subsection{nselectboot}
-Pour chaque $k$, l'instabilité en fonction de $(\alpha, \omega)$. Bleu = bas =
-bon (peu instable). $\times$ = meilleur $(\alpha, \omega)$ pour ce $k$.
-
-\subsection{Canadian — Stabilité}
+\paragraph{Growth} ($k=2$, ARI 0.42)
 \begin{center}
-\includegraphics[width=0.85\textwidth]{figures/stabilite_heatmap_canadian.png}
+\small
+\begin{tabular}{lrr}
+\toprule
+& C1 & C2 \\
+\midrule
+Fille & 6 & 48 \\
+Garcon & 29 & 10 \\
+\bottomrule
+\end{tabular}
 \end{center}
 
-\subsection{Canadian — nselectboot}
+\paragraph{Tecator} ($k=3$, ARI 0.58)
+\begin{center}
+\small
+\begin{tabular}{lrrr}
+\toprule
+& C1 & C2 & C3 \\
+\midrule
+Maigre & 19 & 0 & 93 \\
+Moyen & 39 & 23 & 0 \\
+Gras & 2 & 39 & 0 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ============================================================================
+\section{Heatmaps d'instabilité (nselectboot)}
+% ============================================================================
+
+Pour chaque $k$, l'instabilité en fonction de $(\alpha,\omega)$. Bleu = bas = bon.
+$\times$ = meilleur $(\alpha,\omega)$ pour ce $k$ (voir script d'analyse).
+
+\subsection{Canadian}
 \begin{center}
 \includegraphics[width=0.85\textwidth]{figures/nselectboot_heatmap_canadian.png}
 \end{center}
 
-\subsection{Autres datasets}
-Les figures \texttt{stabilite\_heatmap\_*.png} et
-\texttt{nselectboot\_heatmap\_*.png} sont dans \texttt{figures/} pour les 4
-datasets. Grille identique : 21×21 (pas 0.05).
+\subsection{AEMET}
+\begin{center}
+\includegraphics[width=0.85\textwidth]{figures/nselectboot_heatmap_aemet.png}
+\end{center}
+
+\subsection{Growth}
+\begin{center}
+\includegraphics[width=0.85\textwidth]{figures/nselectboot_heatmap_growth.png}
+\end{center}
+
+\subsection{Tecator}
+\begin{center}
+\includegraphics[width=0.85\textwidth]{figures/nselectboot_heatmap_tecator.png}
+\end{center}
 
 % ============================================================================
 \section{Paramètres des expériences}
 % ============================================================================
 
 \begin{itemize}
-  \item \textbf{Stabilité} : grille $\alpha, \omega \in \{0, 0.05, \ldots, 1\}$
-    (21×21), $k \in \{2, \ldots, 6\}$, $B=150$, sous-échantillon 80\,\%.
-  \item \textbf{nselectboot} : mêmes paramètres (grille 21×21, $B=150$, $k \in
-    \{2, \ldots, 6\}$).
+  \item Grille $\alpha,\omega \in \{0, 0.05, \ldots, 1\}$ (21×21).
+  \item $k \in \{2,\ldots,6\}$, $B=150$ répétitions bootstrap pour nselectboot.
+  \item Même prétraitement que le pipeline principal (\texttt{src/01\_lissage.R},
+    \texttt{02\_fpca.R}, \texttt{03\_distances.R}).
 \end{itemize}
 
 % ============================================================================
 \section{Conclusion}
 % ============================================================================
 
-La stabilité est un critère simple et sans labels. Mais elle choisit toujours
-$k=2$, ce qui pose problème sur Canadian, AEMET et Tecator. nselectboot, en
-testant plusieurs $(\alpha, \omega)$, récupère $k=4$ sur Canadian et AEMET, et
-$k=3$ sur Tecator.
-Une piste : combiner les deux méthodes ou faire voter plusieurs critères.
+L'expérience 1 s'appuie sur une méthode publiée (instabilité bootstrap, Fang \&
+Wang) pour choisir $k$ à $(\alpha,\omega)$ fixé, puis explore toute la grille.
+Les labels servent uniquement à l'ARI et aux matrices de confusion, pas au choix
+de $(k,\alpha,\omega)$.
 
 \vspace{1em}
-\noindent\textbf{En résumé pour les correcteurs :}
+\noindent\textbf{Références :}
 \begin{itemize}
-  \item Problème : choisir $k$, $\alpha$, $\omega$ sans labels.
-  \item Méthode 1 (stabilité) : maximise l'accord quand on enlève 20\,\% des
-    données. Résultat : $k=2$ partout.
-  \item Méthode 2 (nselectboot) : minimise l'instabilité sur une grille.
-    Résultat : $k=4$ sur Canadian et AEMET (correct), $k=2$ sur Growth (correct),
-    $k=3$ sur Tecator (correct).
-  \item Conclusion : la stabilité a un biais vers les petits $k$. nselectboot
-    fait mieux quand on regarde toute la grille.
-\end{itemize}
-
-% ============================================================================
-\section*{Références}
-% ============================================================================
-
-\begin{itemize}
-  \item Dudoit, S., Fridlyand, J. (2002). A prediction-based resampling
-    method for estimating the number of clusters. \textit{Genome Biology},
-    3(7), research0036.
   \item Fang, Y., Wang, J. (2012). Selection of the number of clusters via the
-    bootstrap method. \textit{Computational Statistics and Data Analysis},
-    56(3), 468--477.
-  \item Wang, J. (2010). Consistent selection of the number of clusters via
-    crossvalidation. \textit{Biometrika}, 97(4), 893--904.
+    bootstrap method. \textit{Computational Statistics and Data Analysis}, 56(3),
+    468--477.
 \end{itemize}
 
 \end{document}

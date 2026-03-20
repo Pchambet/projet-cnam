@@ -1,0 +1,43 @@
+---
+description: Garde-fous statistiques — Ne pas modifier les paramètres du modèle R sans justification
+globs: "**/*.R"
+alwaysApply: false
+---
+
+# Règles strictes pour le code R (modèles statistiques)
+
+## Principe
+
+L'IA ne doit **jamais** modifier les variables de confusion, les paramètres du modèle statistique ou les formules de calcul sans **expliquer d'abord l'impact mathématique** à l'utilisateur.
+
+## Paramètres protégés
+
+Ne pas modifier sans justification explicite :
+
+- **α (alpha)** : pondération D₀/D₁ dans Dₚ(α) — contrôle niveau vs forme
+- **ω (omega)** : pondération fonctionnel/vectoriel dans D_w(α, ω)
+- **nbasis** : nombre de bases B-splines (règle actuelle : `min(65, max(15, N %/% 3))`)
+- **λ (lambda)** : paramètre de lissage (grille GCV : `log λ ∈ [-4, 8]`)
+- **k** : nombre de clusters (fixé par vérité terrain : `length(levels(regions))`)
+- **B** : nombre de réplications bootstrap (stabilité, nselectboot)
+- **SUBSAMPLE_FRAC** : fraction de sous-échantillonnage (ex. 0.8)
+
+## Procédure obligatoire
+
+Avant toute modification proposée :
+
+1. **Identifier** le paramètre impacté
+2. **Expliquer** l'impact mathématique (ex. : « augmenter α renforce le poids des dérivées dans la distance »)
+3. **Proposer** une vérification (ex. : comparer ARI avant/après sur Canadian Weather)
+
+## Références de vérité
+
+- **Seed** : `set.seed(42)` — ne jamais changer
+- **Valeurs attendues** (Canadian, seed=42) : voir `docs/revue_rapport_synthese.md`
+- **ARI (α=0.6, ω=0.8)** : 0.898 pour stratégie B sur Canadian
+
+## Interdictions
+
+- Ne pas « torturer les données » pour faire tourner le code sans erreur
+- Ne pas modifier les formules pour obtenir des p-values ou ARI plus favorables
+- Ne pas supprimer les garde-fous (seed, vérifications) pour « simplifier »

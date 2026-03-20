@@ -9,10 +9,21 @@ fonctionnelles + vectorielles.
     de données hybrides fonctionnelles + vectorielles (HFV-PCA / ACPF hybride).
     C'est la référence principale pour les méthodes RS-PCA / HFV-PCA mentionnées
     dans le plan de stage.
-  - `bioinformatics_19_9_1090.pdf` : article de *Bioinformatics* (vol. 19,
-    n° 9, p. 1090) sur le bagging et l'instabilité en clustering. Utilisé comme
-    référence pour les approches de stabilité et de consensus en classification.
-  - (À ajouter) articles complémentaires : NbClust, Fang & Wang (2012), etc.
+  - `bioinformatics_19_9_1090.pdf` : Dudoit & Fridlyand (2003), *Bagging to improve
+    the accuracy of a clustering procedure*, Bioinformatics, vol. 19, n° 9, p. 1090.
+    Référence pour le bagging et l'instabilité en clustering.
+  - Clest (2002) : Dudoit & Fridlyand, *A prediction-based resampling method for
+    estimating the number of clusters*, Genome Biology, 3(7), research0036.
+    Méthode de sélection de k par prédictibilité + calibration par nullité.
+  - Fang & Wang (2012) : *Selection of the number of clusters via the bootstrap
+    method*, Computational Statistics and Data Analysis, 56(3), 468–477.
+    Implémenté dans `fpc::nselectboot`.
+  - Wang (2010) : *Consistent selection of the number of clusters via crossvalidation*,
+    Biometrika, 97(4), 893–904. Base théorique pour l'instabilité.
+
+- **`theorie_stabilite_clustering.tex`** : document théorique détaillant les maths
+  derrière Clest, bagging, Fang-Wang, Wang et notre protocole actuel.
+
 
 - **`books/`**
   - `Ramsay_Silverman_Functional_data_analysis.pdf` : livre de Ramsay & Silverman,

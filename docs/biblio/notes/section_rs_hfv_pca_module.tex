@@ -1,0 +1,86 @@
+% Module LaTeX sans preambule
+% A inclure dans un rapport principal via \input{...}
+
+\section{Introduction : le probleme mathematique a resoudre}
+
+Dans de nombreuses applications, une meme unite statistique est decrite par :
+\begin{itemize}
+  \item une composante \textbf{fonctionnelle} (courbe temporelle, signal, profil),
+  \item une composante \textbf{vectorielle} (variables cliniques, biomarqueurs, covariables usuelles).
+\end{itemize}
+
+Notons $Z_i=(Y_i,X_i)$ une observation hybride, avec
+$Y_i\in\mathcal{F}$ et $X_i\in\mathbb{R}^p$.
+On suppose les donnees centrees sans perte de generalite, $\mathbb{E}[Z_i]=0$.
+
+\section{Rappels mathematiques : PCA et FPCA}
+
+\subsection{PCA vectorielle}
+\[
+\max_{\|w\|=1}\ \mathrm{Var}(w^\top X)=\max_{\|w\|=1}\ w^\top C_X w,\qquad
+C_Xw=\kappa w.
+\]
+
+\subsection{FPCA}
+\[
+(C_Y f)(s)=\int_{\mathcal{T}}\sigma_Y(s,t)f(t)\,dt,\qquad
+C_Y\phi=\tau\phi.
+\]
+\[
+Y(t)\approx \sum_{h=1}^L\eta_h\phi_h(t),\qquad
+\eta_h=\langle Y,\phi_h\rangle_{L^2}.
+\]
+
+\section{RS-PCA (Ramsay \& Silverman)}
+
+\[
+\eta_i=\int x_i(s)\xi(s)\,ds+y_i^\top v.
+\]
+\[
+\langle z^{(1)},z^{(2)}\rangle
+=\int x^{(1)}x^{(2)}+C^2{y^{(1)}}^\top y^{(2)}.
+\]
+
+En pratique (chap. 10.3), on projette $x_i$ sur une base, on forme
+$w_i=(c_i,Cy_i)$, puis on fait une PCA sur
+\[
+\widehat{\Sigma}_w=\frac{1}{N-1}\sum_{i=1}^N(w_i-\bar{w})(w_i-\bar{w})^\top.
+\]
+
+\section{HFV-PCA (Jang, 2021)}
+
+\[
+\mathcal{H}=\mathcal{F}\times\mathbb{R}^p,\qquad
+\langle (f_1,v_1),(f_2,v_2)\rangle_{\mathcal{H}}
+=\langle f_1,f_2\rangle_{\mathcal{F}}+\omega v_1^\top v_2.
+\]
+\[
+K=\sum_{m\ge1}\lambda_m\,\xi_m\otimes\xi_m,\qquad
+Z=\sum_{m\ge1}\rho_m\xi_m,\qquad
+\rho_m=\langle Z,\xi_m\rangle_{\mathcal{H}}.
+\]
+
+Theoreme 4 (modele tronque) :
+\[
+V=
+\begin{pmatrix}
+V_y&V_{yx}\\
+V_{xy}&V_x
+\end{pmatrix},
+\quad
+V_y=\mathrm{Cov}(\eta),\ 
+V_{yx}=\mathrm{Cov}(\eta,\gamma),\ 
+V_x=\mathrm{Cov}(\gamma).
+\]
+\[
+\rho_{im}=\sum_{h=1}^L c_{mh}\eta_{ih}+\sum_{j=1}^J d_{mj}\gamma_{ij}.
+\]
+
+\section{Comparaison courte}
+
+\begin{itemize}
+  \item RS : route directe via representation en base + PCA augmentee.
+  \item HFV : route operateur/covariance hybride + fusion via matrice bloc.
+  \item Dans les deux cas, la ponderation inter-blocs est structurelle.
+\end{itemize}
+

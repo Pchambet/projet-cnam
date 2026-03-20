@@ -1,0 +1,14 @@
+---
+description: Lire STATE_OF_PROJECT.md avant toute action complexe
+alwaysApply: true
+---
+
+# Contexte macro du projet
+
+Avant toute action complexe (réécriture de paragraphe, refactor de code R, modification de formules ou de paramètres statistiques) :
+
+1. **Lire** `STATE_OF_PROJECT.md` pour réaligner la micro-tâche avec la macro-vision
+2. **Respecter** l'hypothèse centrale et le paradoxe silhouette vs ARI documentés
+3. **Consulter** `docs/revue_rapport_synthese.md` pour les valeurs de référence (ARI, Silhouette)
+4. **Appliquer** `.cursor/rules/r_strict.mdc` pour toute modification de code R
+5. **Nomenclature** : **ω** = Dw(α, ω) (étape 03) ; **r** = ratio HFV V_F/V_Y (étape 02b) — ne pas intervertir

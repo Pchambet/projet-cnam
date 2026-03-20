@@ -38,6 +38,7 @@ for (d in DATASETS) {
   }
 
   nb <- read.csv(f)
+  if (!"omega" %in% names(nb) && "r" %in% names(nb)) nb$omega <- nb$r
   alphas <- sort(unique(nb$alpha))
   omegas <- sort(unique(nb$omega))
   k_vals <- 2:6
