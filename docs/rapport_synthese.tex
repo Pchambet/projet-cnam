@@ -1051,6 +1051,15 @@ Pour une grille fine (ex.\ $21\times 21$), plusieurs valeurs de $k$ et $B$
 grand (ex.\ $150$), le coût est élevé mais parallélisable en principe ; voir
 les scripts de l'expérience~01 pour le détail.
 
+\paragraph{Complément simulé (expérience~01 enrichie).}
+Le même critère est aussi appliqué à des \textbf{données simulées} hybrides
+(Cas2\_deriv, scénarios alignés sur l'expérience~03), avec $k$ et labels
+connus : cela permet une validation \emph{sous modèle} du pipeline
+(\texttt{run\_nselectboot\_simulated.R}, sorties dans
+\texttt{results\_simulated/}). Ce volet \textbf{complète} l'évaluation sur les
+quatre jeux réels sans la remplacer ; les limites du générateur doivent être
+rappelées dans la discussion.
+
 % ────────────────────────────────────────────────────────────────────────
 \subsection{Vote entre critères de validation}
 

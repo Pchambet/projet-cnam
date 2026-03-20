@@ -31,7 +31,9 @@ littérature : \textbf{nselectboot} (Fang \& Wang, 2012), implémentée dans R
 bootstrap. Un ancien protocole de « stabilité » ad hoc (sans article de référence)
 a été retiré pour clarifier le message. On teste une grille 21×21 en
 $(\alpha,\omega)$ sur quatre jeux de données ; les labels ne servent qu'à
-évaluer l'ARI une fois $k$ choisi.
+évaluer l'ARI une fois $k$ choisi. Un \textbf{volet simulé} (données hybrides
+Cas2\_deriv, aligné sur l'expérience~03) complète l'étude sous vérité de $k$
+connue ; il ne remplace pas l'évaluation sur données réelles.
 \end{abstract}
 
 \tableofcontents
@@ -243,6 +245,38 @@ $\times$ = meilleur $(\alpha,\omega)$ pour ce $k$ (voir script d'analyse).
 \end{center}
 
 % ============================================================================
+\section{Volet simulé (complément contrôlé)}
+% ============================================================================
+
+On enrichit l'expérience~1 avec le \textbf{même} protocole nselectboot appliqué
+aux \textbf{données simulées} du projet (Cas2\_deriv, scénarios S1--S4 comme
+l'expérience~03). Ici $k_{\mathrm{vrai}}$ et les labels sont fournis par le
+générateur : l'intérêt est de \textbf{valider le pipeline} sous hypothèses
+contrôlées, pas de conclure sur le monde réel sans les quatre jeux ci-dessus.
+
+\paragraph{Risques et limites.}
+\begin{itemize}
+  \item Le générateur impose une structure de covariance et un couplage
+    fonctionnel / vectoriel qui ne coïncident pas nécessairement avec les
+    données réelles.
+  \item Un nombre de seeds et de scénarios suffisant doit être documenté pour
+    éviter tout cherry-picking (voir \texttt{results\_simulated/README.md}).
+  \item Ce volet est explicitement \textbf{complémentaire} : les tableaux et
+    heatmaps sur Canadian, AEMET, Growth et Tecator restent la référence
+    empirique principale.
+\end{itemize}
+
+\paragraph{Exemple de heatmap (scénario S1, seed de référence).}
+\IfFileExists{figures/nselectboot_heatmap_sim_S1_seed42.png}{%
+\begin{center}
+\includegraphics[width=0.85\textwidth]{figures/nselectboot_heatmap_sim_S1_seed42.png}
+\end{center}}{%
+\begin{center}
+\textit{(Figure absente : exécuter \texttt{analyse\_nselectboot\_simulated.R} après
+\texttt{run\_nselectboot\_simulated.R}.)}
+\end{center}}
+
+% ============================================================================
 \section{Paramètres des expériences}
 % ============================================================================
 
@@ -251,6 +285,9 @@ $\times$ = meilleur $(\alpha,\omega)$ pour ce $k$ (voir script d'analyse).
   \item $k \in \{2,\ldots,6\}$, $B=150$ répétitions bootstrap pour nselectboot.
   \item Même prétraitement que le pipeline principal (\texttt{src/01\_lissage.R},
     \texttt{02\_fpca.R}, \texttt{03\_distances.R}).
+  \item \textbf{Simulé :} \texttt{src/00\_preprocess\_simulated.R}, scénarios
+    S1--S4 et paramètres alignés sur l'expérience~03 ; sorties
+    \texttt{experiments/01\_stabilite/results\_simulated/}.
 \end{itemize}
 
 % ============================================================================
@@ -260,7 +297,8 @@ $\times$ = meilleur $(\alpha,\omega)$ pour ce $k$ (voir script d'analyse).
 L'expérience 1 s'appuie sur une méthode publiée (instabilité bootstrap, Fang \&
 Wang) pour choisir $k$ à $(\alpha,\omega)$ fixé, puis explore toute la grille.
 Les labels servent uniquement à l'ARI et aux matrices de confusion, pas au choix
-de $(k,\alpha,\omega)$.
+de $(k,\alpha,\omega)$. Le volet simulé ajoute une validation sous modèle sans
+se substituer aux résultats sur les quatre jeux réels.
 
 \vspace{1em}
 \noindent\textbf{Références :}

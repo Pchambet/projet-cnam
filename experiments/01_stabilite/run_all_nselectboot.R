@@ -4,7 +4,12 @@
 #
 # Usage : source("experiments/01_stabilite/run_all_nselectboot.R")
 #
+# Volet simulé (aligné exp. 3) : après les 4 jeux réels, optionnel (coûteux).
+#   RUN_NSELECTBOOT_SIMULATED <- TRUE   # avant source, pour enrichir l’exp. 1
+#
 # ============================================================================
+
+if (!exists("RUN_NSELECTBOOT_SIMULATED")) RUN_NSELECTBOOT_SIMULATED <- FALSE
 
 cat("\n")
 cat("══════════════════════════════════════════════════════════════════════\n")
@@ -28,6 +33,16 @@ for (d in DATASETS) {
   source("experiments/01_stabilite/run_nselectboot.R", local = FALSE)
 }
 
+if (RUN_NSELECTBOOT_SIMULATED) {
+  cat("\n")
+  cat(">>> Volet enrichi : données simulées (aligné exp. 3, sans modifier l’exp. 3)\n")
+  source("experiments/01_stabilite/run_nselectboot_simulated.R", local = FALSE)
+} else {
+  cat("\n  (Volet simulé non lancé — définir RUN_NSELECTBOOT_SIMULATED <- TRUE pour l’activer.)\n")
+}
+
 cat("\n══════════════════════════════════════════════════════════════════════\n")
-cat("  nselectboot terminé. Résultats dans experiments/01_stabilite/results/\n")
+cat("  nselectboot terminé.\n")
+cat("  Jeux réels : experiments/01_stabilite/results/\n")
+cat("  Simulé     : experiments/01_stabilite/results_simulated/\n")
 cat("══════════════════════════════════════════════════════════════════════\n\n")
