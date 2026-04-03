@@ -30,23 +30,30 @@ Ces méthodes modélisent des distances sur les variations fonctionnelles ($D_0$
 
 - **Stratégie A (RS-PCA + $k$-means) :** Extraction des scores des courbes via ACP Fonctionnelle (FPCA). Banalisation des deux modalités par simple concaténation, suivie d'un algorithme $k$-means.
 - **Stratégie B (Distance Additive $D_w$) :** Construction d'une dissimilarité pondérée normalisée combinant l'amplitude, les gradients et les vecteurs :
+
 $$
 D_w(\alpha,\omega) = \sqrt{\omega \underbrace{\bigl[(1-\alpha)\tilde{D}_0^2 + \alpha\tilde{D}_1^2\bigr]}_{D_p(\alpha)^2} + (1-\omega)\tilde{D}_s^2}
 $$
+
   Suivie d'un Partitioning Around Medoids (PAM).
 - **Stratégie C (Produit de Noyaux $D_K$) :** Exigence stricte de similarité simultanée via la multiplication de noyaux gaussiens $K_f \cdot K_s$ ; la matrice de dissimilarité associée s'écrit :
+
 $$
 D_K(i,j) = \sqrt{K(i,i) + K(j,j) - 2K(i,j)}
 $$
+
+
 
 ### 2. L'Innovation : L'Hybridation Précoce (HFV)
 *Principal apport théorique implémenté permettant d'outrepasser les limites de l'hybridation tardive.*
 Au lieu de fusionner des dissimilarités en surface, l'algorithme "Hybride Fonctionnel-Vectoriel" (HFV) crée un espace hybride fondé sur la covariance croisée en amont de tout maillage géométrique.
 
 *   On estime une **Matrice de Covariance Jointe** unifiant les variances marginales et les variances *croisées*.
+
 $$
 V = \begin{bmatrix} V_y & V_{yx} \\ V_{xy} & V_x \end{bmatrix}
 $$
+
 *   Le ratio de trace garantit l'équilibrage des énergies: $r = \frac{\mathrm{tr}(\mathrm{Cov}(\eta))}{\mathrm{tr}(\mathrm{Cov}(\gamma))}$.
 *   La diagonalisation offre des composantes informées de l'influence mutuelle des variables, reconstruites dans $L^2$ avant clustering.
 
