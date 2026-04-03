@@ -59,6 +59,18 @@ $$
 
 ---
 
+## 📊 Matériel Expérimental (Données Réelles & Simulations)
+
+Le pipeline a été confronté à un double environnement d'évaluation stricte :
+1. **3 Jeux de données réels publics** :
+   - *Canadian Weather* (4 régions climatiques) : Températures annuelles $L^2$ $\times$ position/précipitations $\mathbb{R}^p$.
+   - *Berkeley Growth* (2 sexes) : Courbe de croissance $L^2$ $\times$ mensurations terminales $\mathbb{R}^p$.
+   - *Tecator* (3 niveaux de gras) : Spectre d'absorbance infrarouge $L^2$ $\times$ eau/protéines $\mathbb{R}^p$.
+2. **4 Scénarios Simulés (Générateur intégré)** :
+   Afin de moduler indépendamment la difficulté de l'espace mixte, le dépôt intègre un environnement de simulation de Monte-Carlo. Il génère 4 scénarios (nommés $S_1$ à $S_4$), allant d'un signal mixte très franc jusqu'à un écrasement quasi-total par le bruit vectoriel et fonctionnel. Cela permet de certifier rigoureusement les conditions géométriques où l'Hybridation Précoce surpasse l'état de l'art.
+
+---
+
 ## 🔬 Découvertes & Diagnostic : "Le Verrou du Non-Supervisé"
 
 Le projet soulève et démontre empiriquement un **Paradoxe de la Silhouette** en contexte non supervisé mixte.
